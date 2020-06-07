@@ -18,7 +18,12 @@
 # # scRNAsed seqFISH integration
 
 # %% [markdown]
-# Objectives:
+# This is a Jupytext file, i.e. a python script that can be used directly with a standard editor (Spyder, PyCharm, VS Code, ...) or as a JupyterLab notebook.  
+# This format is much better for version control, see [here](https://nextjournal.com/schmudde/how-to-version-control-jupyter) for the several reasons.  
+# If you want to use this file as a JupyterLab notebook (which I recommend) see the [installation instructions](https://jupytext.readthedocs.io/en/latest/install.html).
+
+# %% [markdown]
+# **Objectives:**
 # - try to map non spatial scRNAseq data to spatial seqFISH data
 # - find the minimum number of genes required for this mapping
 # - investigate on whether there are some signatures in non spatial scRNAseq data about the spatial organisation of cells
