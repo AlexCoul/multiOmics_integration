@@ -259,7 +259,24 @@ plt.tight_layout()
 # We will simply work on the data given by the workshop organizers as gene expression data are already well processed.
 
 # %% [markdown]
-# ## Test kNN
+# ## Map non spatial scRNAseq data to spatial seqFISH data
+
+# %% [markdown]
+# We train and test the models with the scRNAseq data, assuming Tasic's phenotypes definition is the gold standard.
+
+# %%
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X = scaler.fit_transform(scRNAseq)
+
+# %%
+from multiprocessing import cpu_count
+
+nb_cores = cpu_count()
+print(f"There are {nb_cores} available cores")
+
+# %% [markdown]
+# ### Test kNN
 
 # %% [markdown]
 # To test the minimum number of genes required for cell phenotype classification, we try quickly the k-nearest neighbors model.
@@ -267,49 +284,87 @@ plt.tight_layout()
 # %%
 from sklearn.metrics import accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_validate
 
 clf = KNeighborsClassifier(n_neighbors=10)
-scores = cross_val_score(clf, X, y_true, cv=10)
-scores
+cv = cross_validate(clf, X, y_true,
+                    cv=10,
+                    n_jobs=nb_cores-1,
+                    scoring=['accuracy', 'balanced_accuracy'])
+print(f"Accuracy: {cv['test_accuracy'].mean():0.2f} (+/- {cv['test_accuracy'].std()*2:0.2f})")
+print(f"Balanced accuracy: {cv['test_balanced_accuracy'].mean():0.2f} (+/- {cv['test_balanced_accuracy'].std()*2:0.2f})")
+
+# %% [markdown]
+# The performance of kNN is not so good, we test the Support Vector Classifier
+
+# %% [markdown]
+# ### Test SVC
+
+# %% [markdown]
+# We use the same classifier as in *Zhu et al* for this exploratory anaysis, but ideally we should test a lot of different classifiers with hyperparameter search for each of them.  
+# In Zhu et al they used `C = 1e−6`, `class_weight = 'balanced'`, `dual = False`, `max_iter = 10,000`, and `tol = 1e−4`  
+# I just change max_iter to its default -1 (infinite)
 
 # %%
-print("Accuracy: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
+from sklearn.svm import SVC
+
+clf = SVC(class_weight = 'balanced', tol = 1e-4, C = 1e-6, max_iter = -1)
+cv = cross_validate(clf, X, y_true,
+                    cv=10,
+                    n_jobs=nb_cores-1,
+                    scoring=['accuracy', 'balanced_accuracy'])
+print(f"Accuracy: {cv['test_accuracy'].mean():0.2f} (+/- {cv['test_accuracy'].std()*2:0.2f})")
+print(f"Balanced accuracy: {cv['test_balanced_accuracy'].mean():0.2f} (+/- {cv['test_balanced_accuracy'].std()*2:0.2f})")
 
 # %% [markdown]
-# The performance of kNN is pretty poor, we use the Support Vector Classifier
+# With Zhu's parameters the model is very bad!
+
+# %%
+from sklearn.svm import SVC
+
+clf = SVC(class_weight = 'balanced')
+cv = cross_validate(clf, X, y_true,
+                    cv=10,
+                    n_jobs=nb_cores-1,
+                    scoring=['accuracy', 'balanced_accuracy'])
+print(f"Accuracy: {cv['test_accuracy'].mean():0.2f} (+/- {cv['test_accuracy'].std()*2:0.2f})")
+print(f"Balanced accuracy: {cv['test_balanced_accuracy'].mean():0.2f} (+/- {cv['test_balanced_accuracy'].std()*2:0.2f})")
 
 # %% [markdown]
-# ## Find optimal hyperparameters for SVC
+# With defaults parameters it's much better.
 
 # %% [markdown]
-# We use the same classifier as in *Zhu et al* for this exploratory anaysis, but ideally we should test a lot of different classifiers with hyperparameter search for each of them.
+# ### Find optimal hyperparameters for SVC
 
 # %%
 from time import time
 from scipy.stats import loguniform
 from sklearn.svm import SVC
+from sklearn.model_selection import RandomizedSearchCV
 
-clf = SVC()
+clf = SVC(class_weight = 'balanced')
 
 # specify parameters and distributions to sample from
-param_dist = {'C': loguniform(1e-2, 1e1),
-              'gamma': loguniform(1e-2, 1e1)}
+param_dist = {'C': loguniform(1e-7, 1e3),
+              'gamma': loguniform(1e-7, 1e3)}
 
 # run randomized search
-n_iter_search = 50
+n_iter_search = 2000
 random_search = RandomizedSearchCV(clf, param_distributions=param_dist,
                                    n_iter=n_iter_search,
-                                   n_jobs=7,
-                                   scoring='accuracy')
+                                   n_jobs=nb_cores-1,
+                                   scoring=['accuracy', 'balanced_accuracy'],
+                                   refit='balanced_accuracy',
+                                   random_state=0)
 
 start = time()
 random_search.fit(X, y_true)
+end = time()
 print("RandomizedSearchCV took %.2f seconds for %d candidates"
-      " parameter settings." % ((time() - start), n_iter_search))
+      " parameter settings." % ((end - start), n_iter_search))
 
 
-# Utility function to report best scores
+# Utility function to report best hyperparameters sets
 def report(results, n_top=3):
     for i in range(1, n_top + 1):
         candidates = np.flatnonzero(results['rank_test_score'] == i)
@@ -321,40 +376,122 @@ def report(results, n_top=3):
             print("Parameters: {0}".format(results['params'][candidate]))
             print("")
 
-report(random_search.cv_results_)
+# Utility function to report best hyperparameters sets with multiple scores
+def report_multiple(results, n_top=3, scores=['balanced_accuracy','accuracy']):
+    for i in range(1, n_top + 1):
+        candidates = np.flatnonzero(results['rank_test_'+scores[0]] == i)
+        for candidate in candidates:
+            for score in scores:
+                rank = results['rank_test_'+score][candidate]
+                score_mean = results['mean_test_'+score][candidate]
+                score_std = results['std_test_'+score][candidate]
+                params = results['params'][candidate]
+                print(f"Model with {score} rank: {rank}")
+                print(f"Mean {score} validation score: {score_mean:1.3f} (std: {score_std:1.3f})")
+            print(f"Parameters: {params}")
+            print("")
+
+report_multiple(random_search.cv_results_)
+
+# %%
+import json, time
+
+# Utility function to save best hyperparameters sets
+def summary_cv(results, n_top=20):
+    summary = []
+    for i in range(1, n_top + 1):
+        candidates = np.flatnonzero(results['rank_test_score'] == i)
+        for candidate in candidates:
+            model = {'rank': i,
+                     'mean validation score': results['mean_test_score'][candidate],
+                     'std validation score': results['std_test_score'][candidate],
+                     'parameters': results['params'][candidate]
+                    }
+            summary.append(model)
+    return summary
+
+# Utility function to save best hyperparameters sets with multiple scores
+def summary_cv_multiple(results, n_top=20, scores=['balanced_accuracy','accuracy']):
+    summary = []
+    for i in range(1, n_top + 1):
+        candidates = np.flatnonzero(results['rank_test_'+scores[0]] == i)
+        for candidate in candidates:
+            model = {}
+            for score in scores:
+                model['rank '+score] = results['rank_test_'+score][candidate]
+                model['mean validation '+score] = results['mean_test_'+score][candidate]
+                model['std validation '+score] = results['std_test_'+score][candidate]
+            model['parameters'] = results['params'][candidate]
+                    
+            summary.append(model)
+    return summary
+
+t = time.localtime()
+timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
+with open(f'../data/processed/random_search_cv_results-{timestamp}.json', 'w') as fp:
+    json.dump(summary_cv_multiple(random_search.cv_results_), fp, indent=4)
+
+
+# %% [markdown]
+# #### Map of hyperparameters scores
+
+# %%
+def hyperparam_map(results, param_x, param_y, score, n_top = 20, best_scores_coeff=500,
+                   figsize = (10,10), best_cmap=sns.light_palette("green", as_cmap=True)):
+    df = pd.DataFrame(results['params'])
+    df['score'] = results[score]
+
+    plt.figure(figsize=figsize)
+    ax = sns.scatterplot(x=param_x, y=param_y, hue='score', size='score', data=df)
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+
+    best = df.sort_values(by='score', ascending=False).iloc[:n_top,:]
+    best_scores = best['score'] - best['score'].min()
+    best_scores = best_scores / best_scores.max()
+
+    ax.scatter(x=best[param_x], y=best[param_y], c=best_scores, s=best_scores*best_scores_coeff, marker='+', cmap=best_cmap)
+    ax.scatter(x=best[param_x].iloc[0], y=best[param_y].iloc[0], s=best_scores.iloc[0]*best_scores_coeff/2, marker='o', color='r', alpha=0.5)
+
+
+# %%
+hyperparam_map(results, param_x = 'C', param_y = 'gamma', score = 'mean_test_balanced_accuracy', n_top = 20, figsize = (10,10))
 
 # %% [markdown]
 # ### Top-down elimination of variables
 
 # %%
-# If you want to run the LONG top-down elimination of variables, uncomment and run this:
+# If you want to run the LONG top-dpwn elimination of variables, uncomment and run this:
 
+C = random_search.best_params_['C']
+gamma = random_search.best_params_['gamma']
 # clf = SVC(C=9.32, gamma=0.0157)
-# Xelim = np.copy(X) # the X data that will be pruned
+clf = SVC(C=C, gamma=gamma) 
+Xelim = np.copy(X) # the X data that will be pruned
 
-# elimination_report = []
+elimination_report = []
 
-# Nvar = X.shape[1]
-# for i in range(Nvar-1):
-#     print("Removing {} variables".format(i+1), end="    ")
-#     scores = []
-#     for var in range(Xelim.shape[1]):
-#         # we remove only one variabme at a time
-#         Xtest = np.delete(Xelim, var, axis=1)
-#         score = cross_val_score(clf, Xtest, y_true, cv=5, n_jobs=5).mean()
-#         #print("var {}/{}: {}".format(var+1, Xelim.shape[1], score))
-#         scores.append(score)
+Nvar = X.shape[1]
+for i in range(Nvar-1):
+    print("Removing {} variables".format(i+1), end="    ")
+    scores = []
+    for var in range(Xelim.shape[1]):
+        # we remove only one variabme at a time
+        Xtest = np.delete(Xelim, var, axis=1)
+        score = cross_val_score(clf, Xtest, y_true, cv=5, n_jobs=5).mean()
+        #print("var {}/{}: {}".format(var+1, Xelim.shape[1], score))
+        scores.append(score)
         
-#     # find the variable that was the less usefull for the model
-#     maxi_score = max(scores)
-#     worst_var = scores.index(maxi_score)
-#     print("eliminating var n°{}, the score was {:.3f}".format(worst_var, maxi_score))
-#     elimination_report.append([worst_var, maxi_score])
-#     # eliminate this variable for next round
-#     Xelim = np.delete(Xelim, worst_var, axis=1)
+    # find the variable that was the less usefull for the model
+    maxi_score = max(scores)
+    worst_var = scores.index(maxi_score)
+    print("eliminating var n°{}, the score was {:.3f}".format(worst_var, maxi_score))
+    elimination_report.append([worst_var, maxi_score])
+    # eliminate this variable for next round
+    Xelim = np.delete(Xelim, worst_var, axis=1)
 
-# elimination_report = np.array(elimination_report)
-# np.savetxt("../data/processed/elimination_report.csv", elimination_report, delimiter=',', header='var index, score', comments='', fmt=['%d', '%f'])
+elimination_report = np.array(elimination_report)
+np.savetxt("./elimination_report.csv", elimination_report, delimiter=',', header='var index, score', comments='', fmt=['%d', '%f'])
 
 # %%
 # If you want to load the data to display them directly, run this:
@@ -365,10 +502,31 @@ plt.figure(figsize=(14,8))
 plt.plot(elimination_report[::-1,1]);
 plt.xlabel('nb remaining variables')
 plt.ylabel('score')
+plt.title('Score of scRNAseq classification during variables (genes) elimination')
 
 # %% [markdown]
 # First the funny thing is that the score is non monotonic wrt the number of remaining variables.  
 # It looks like we could keep only 29 genes! (last maximum) 
+
+# %% [markdown]
+# From Zhu *et al*:  
+#
+# The performance was evaluated
+# by cross-validation. By using only 40 genes, we were able to achieve
+# an average level of 89% mapping accuracy. Increasing the number
+# of genes led to better performance (92% for 60 genes and 96% for
+# 80 genes)  
+# Cross-validation analysis revealed that, using
+# these 43 genes as input, the SVM model accurately mapped 90.1%
+# of the cells in the scRNAseq data to the correct cell type. Thus, we
+# used these 43 genes (Supplementary Table 2) to map cell types in
+# the seqFISH data.  
+# We found that 5.5%
+# cells were excluded, that is, they could not be confidently mapped to
+# a single cell type (with 0.5 or less probability). Among the mapped
+# cells, 54% were glutamatergic neurons, 37% were GABAergic neurons,
+# 4.8% were astrocytes, and other glial cell types and endothelial cells
+# comprised the remaining 4.2% of cells
 
 # %% [markdown]
 # ### Infer cell types from restricted gene list
