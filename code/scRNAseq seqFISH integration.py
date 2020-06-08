@@ -29,7 +29,7 @@
 # - investigate on whether there are some signatures in non spatial scRNAseq data about the spatial organisation of cells
 
 # %% [markdown]
-# # Imports
+# ## Imports
 
 # %%
 import numpy as np
@@ -43,7 +43,7 @@ from path import Path
 # %qtconsole
 
 # %%
-data_dir = Path("../data/tasic_scRNAseq/")
+data_dir = Path("../data/raw/tasic_scRNAseq/")
 scRNAseq_path = data_dir / "tasic_training_b2.txt"
 seqFISH_path = data_dir / "seqfish_cortex_b2_testing.txt"
 scRNAseq_labels_path = data_dir / "tasic_labels.tsv"
@@ -88,7 +88,8 @@ scRNAseq_labels.head()
 
 # %%
 phenotypes = list(scRNAseq_labels.iloc[:,0].unique())
-print(phenotypes)
+for phenotype in phenotypes:
+    print(phenotype)
 
 # %% [markdown]
 # ### seqFISH coordinates
@@ -103,8 +104,112 @@ seqFISH_coords.head()
 # %% [markdown]
 # ## Exploratory Data Analysis
 
+# %% [markdown]
+# ### Gene expression statistics
+
 # %%
-# label re-encoding
+scRNAseq_stats = scRNAseq.describe().iloc[1:,:] # iloc to skip the `count` statistics
+seqFISH_stats = seqFISH.describe().iloc[1:,:] # iloc to skip the `count` statistics
+scRNAseq_stats.index.name = 'statistics'
+seqFISH_stats.index.name = 'statistics'
+
+# %%
+scRNAseq_stats.T.hist(figsize=(17,8), sharex=True)
+plt.suptitle('Summary statistics for scRNAseq data')
+
+# %%
+seqFISH_stats.T.hist(figsize=(17,8), sharex=True)
+plt.suptitle('Summary statistics for seqFISH data')
+
+# %% [markdown]
+# So as stated in the documentation of the original BIRS repository, the scRNAseq data and seqFISH data are normalized, we shouldn't need to process them further.
+
+# %% [markdown]
+# ### Check data transformations with selected genes
+
+# %%
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import minmax_scale
+from sklearn.preprocessing import MaxAbsScaler
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import Normalizer
+from sklearn.preprocessing import QuantileTransformer
+from sklearn.preprocessing import PowerTransformer
+from scipy.special import expit # the logistic function, the inverse of logit
+
+# %%
+# for 2 variables we compute different transformations that we store in a list
+# choose preferentially variables that have different distribution statistics (outliers, ...)
+
+distributions = []
+selected_variables = ['capn13', 'cdc5l', 'cpne5']
+
+for name in selected_variables:
+
+    X = scRNAseq.loc[:,name].values.reshape(-1, 1) + 1 
+    X_unitary = MinMaxScaler().fit_transform(X)
+    
+    distributions.append([
+    ('Non transformed data '+name, X),
+    ('Data after standard scaling',
+        StandardScaler().fit_transform(X)),
+    ('Data after min-max scaling',
+        MinMaxScaler().fit_transform(X)),
+    ('Data after robust scaling',
+        RobustScaler(quantile_range=(25, 75)).fit_transform(X)),
+    ('Data after quantile transformation (gaussian pdf)',
+        QuantileTransformer(output_distribution='normal')
+        .fit_transform(X)),
+    ('Data after quantile transformation (uniform pdf)',
+        QuantileTransformer(output_distribution='uniform')
+        .fit_transform(X)),
+    ('Data after sample-wise L2 normalizing',   # rescales the vector for each sample to have unit norm, independently of the distribution of the samples.
+        Normalizer().fit_transform(X)),
+    ('Data after square root transformation',
+        np.sqrt((X))),
+    ('Data after arcsin sqrt transformation',
+        np.arcsin(np.sqrt((X_unitary)))),
+    ('Data after power transformation (Yeo-Johnson)',
+     PowerTransformer(method='yeo-johnson').fit_transform(X)),
+    ('Data after power transformation (Box-Cox)',
+     PowerTransformer(method='box-cox').fit_transform(X)),
+    ('Data after log transformation (base e)',
+        np.log(X)),
+    ('Data after centered logistic transformation',
+        expit(X-X.mean())),
+])
+
+# %%
+nb_transfo = len(distributions[0])
+fig, axes = plt.subplots(nrows=nb_transfo, ncols=len(selected_variables), figsize=plt.figaspect(2)*4)
+
+for j in range(len(selected_variables)):
+    one_var_all_transfo = distributions[j]
+    for i in range(nb_transfo):
+        title, data_transfo = one_var_all_transfo[i]
+        bins = 50 # np.ceil(data_transfo.max() - data_transfo.min() + 1).astype(int)
+        axes[i,j].hist(data_transfo, bins=bins)
+        axes[i,j].set_title(title)
+plt.tight_layout()
+
+# %% [markdown]
+# Here the data were already well transformed, so further transformations degrade the distributions for following tasks llike clustering.  
+# Usually, on raw data, power-law transformations like Box-Cox or Yeo-Johnson lead to much improved distributions, they deal well with outliers.
+
+# %% [markdown]
+# ### Check data transformations with UMAP projections
+
+# %%
+import umap
+# if not installed run: conda install -c conda-forge umap-learn
+
+# %% [markdown]
+# #### label re-encoding
+
+# %%
+# we transform Tasic's phenotypes from strings to integers
+# for their visualization on projections
 
 from sklearn import preprocessing
 le = preprocessing.LabelEncoder()
@@ -112,47 +217,46 @@ le.fit(phenotypes)
 
 y_true = le.transform(scRNAseq_labels.iloc[:,0])
 
-# for coloring phenotypes on UMAPprojections
+# colors of data points according to their phenotypes
 colors = [sns.color_palette()[x] for x in y_true]
 
-# %%
-import umap
-# if not installed run: conda install -c conda-forge umap-learn
+# %% [markdown]
+# #### scRNAseq transformation and projection
 
-reducer = umap.UMAP()
-embedding = reducer.fit_transform(scRNAseq)
-embedding.shape
+# %%
+X = scRNAseq.values
+scRNAseq_projections = [('No transformation ', 
+                         umap.UMAP().fit_transform(X)),
+                        ('Yeo-Johnson transformation',
+                         umap.UMAP().fit_transform(PowerTransformer(method='yeo-johnson').fit_transform(X))),
+                        ('Centered logistic transformation',
+                         umap.UMAP().fit_transform(expit(X-X.mean())))]
 
 # %%
 size_points = 5.0
 colormap = 'tab10'
 marker='o'
 
-plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c=y_true, cmap=colormap, marker=marker, s=size_points)
-plt.gca().set_aspect('equal', 'datalim')
-plt.title('UMAP projection of scRNAseq data', fontsize=18);
+nb_transfo = len(scRNAseq_projections)
+fig, axes = plt.subplots(nrows=1, ncols=nb_transfo, figsize=(6*nb_transfo,6))
+
+for i in range(nb_transfo):
+    transfo_name, projection = scRNAseq_projections[i]
+    axes[i].scatter(projection[:, 0], projection[:, 1], c=y_true, cmap=colormap, marker=marker, s=size_points)
+    title = 'scRNAseq - ' + transfo_name
+    axes[i].set_title(title, fontsize=15)
+    axes[i].set_aspect('equal', 'datalim')
+plt.tight_layout()
 
 # %% [markdown]
-# On the reduced space the clusterization doesn't seem optimal, some groups are spread among different 'clouds' of points and some points are in the middle of another group.  
+# On the reduced space of the original data (left figure), the clusterization doesn't seem optimal, some groups are spread among different 'clouds' of points and some points are in the middle of another group.  
+# The Yeo-Johnson doesn't help much as expected from the previous section.  
+# The centered logistic transformation outputs 2 clear clusters, but there are certainly artifacts from the transformation. I actually selected this transformation because on the histograms of the selected genes we can see that the centered logistic transformation pushes data into 2 seperate groups.  
 # But for exploratory analysis for this challenge we stick to the cluster definition of *Tasic et al.*
 
-# %%
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-X = scaler.fit_transform(scRNAseq)
-
-reducer = umap.UMAP()
-embedding = reducer.fit_transform(X)
-embedding.shape
-
-plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c=y_true, cmap=colormap, marker=marker, s=size_points)
-plt.gca().set_aspect('equal', 'datalim')
-plt.title('UMAP projection of scaled scRNAseq data', fontsize=18);
-
 # %% [markdown]
-# The mixing between the two main phenotypes in the main cloud seems even worse after standardization, but hopefuly it's only due to the projection on the 2D space for visualisation, and maybe they are very separable in higher dimensional spaces.
+# **Conclusion**  
+# We will simply work on the data given by the workshop organizers as gene expression data are already well processed.
 
 # %% [markdown]
 # ## Test kNN
