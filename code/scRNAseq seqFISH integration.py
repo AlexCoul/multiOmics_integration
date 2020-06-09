@@ -87,9 +87,13 @@ scRNAseq_labels = pd.read_csv(scRNAseq_labels_path, sep='\t', header=None)
 scRNAseq_labels.head()
 
 # %%
-phenotypes = list(scRNAseq_labels.iloc[:,0].unique())
-for phenotype in phenotypes:
-    print(phenotype)
+counts = scRNAseq_labels.groupby(0)[0].value_counts()
+counts.index = counts.index.droplevel()
+counts.index.name = 'phenotype'
+counts
+
+# %% [markdown]
+# Tha classes are higly imbalanced.
 
 # %% [markdown]
 # ### seqFISH coordinates
@@ -213,6 +217,7 @@ import umap
 
 from sklearn import preprocessing
 le = preprocessing.LabelEncoder()
+phenotypes = list(scRNAseq_labels.iloc[:,0].unique())
 le.fit(phenotypes)
 
 y_true = le.transform(scRNAseq_labels.iloc[:,0])
