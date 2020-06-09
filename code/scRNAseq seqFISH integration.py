@@ -345,11 +345,11 @@ from sklearn.model_selection import RandomizedSearchCV
 clf = SVC(class_weight = 'balanced')
 
 # specify parameters and distributions to sample from
-param_dist = {'C': loguniform(1e-7, 1e3),
-              'gamma': loguniform(1e-7, 1e3)}
+param_dist = {'C': loguniform(1e-8, 1e4),
+              'gamma': loguniform(1e-8, 1e4)}
 
 # run randomized search
-n_iter_search = 2000
+n_iter_search = 4000
 random_search = RandomizedSearchCV(clf, param_distributions=param_dist,
                                    n_iter=n_iter_search,
                                    n_jobs=nb_cores-1,
@@ -411,25 +411,49 @@ def summary_cv(results, n_top=20):
     return summary
 
 # Utility function to save best hyperparameters sets with multiple scores
-def summary_cv_multiple(results, n_top=20, scores=['balanced_accuracy','accuracy']):
-    summary = []
-    for i in range(1, n_top + 1):
-        candidates = np.flatnonzero(results['rank_test_'+scores[0]] == i)
-        for candidate in candidates:
-            model = {}
-            for score in scores:
-                model['rank '+score] = results['rank_test_'+score][candidate]
-                model['mean validation '+score] = results['mean_test_'+score][candidate]
-                model['std validation '+score] = results['std_test_'+score][candidate]
-            model['parameters'] = results['params'][candidate]
-                    
-            summary.append(model)
-    return summary
+def cv_to_df(cv, scores, order_by=None, ascending=False):
+    """
+    Converts the result of a cross-validation randomized search from a dictionnary to a dataframe.
+    
+    Parameters
+    ----------
+    cv : dict
+        The object output by scikit-learn RandomizedSearchCV
+    scores: list(str)
+        A list of metrics
+    order_by: str, list(str), optional
+        Single or list of scores (or ranks) used for ordering the dataframe 
+    ascending: bool
+        How to order the dataframe, default False
+    
+    Returns
+    -------
+    df : dataframe
+        Results of the RandomizedSearchCV
+    
+    Examples
+    --------
+    >>> cv_to_df(random_search.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
+    """
+    
+    scores=['balanced_accuracy','accuracy']
+    df = pd.DataFrame(cv['params'])
+    for score in scores:
+        for stat in ['rank', 'mean', 'std']:
+            col = stat + '_test_' + score
+            new_col = stat + ' ' + score
+            df = df.join(pd.DataFrame(cv[col], columns=[new_col]))
+    
+    if order_by is not None:
+        df.sort_values(by=order_by, ascending=ascending, inplace=True)
+        
+    return df
 
 t = time.localtime()
 timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
-with open(f'../data/processed/random_search_cv_results-{timestamp}.json', 'w') as fp:
-    json.dump(summary_cv_multiple(random_search.cv_results_), fp, indent=4)
+
+cv_search= cv_to_df(random_search.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
+cv_search.to_csv(f'../data/processed/random_search_cv_results-{timestamp}.csv', index=False)
 
 
 # %% [markdown]
@@ -455,7 +479,56 @@ def hyperparam_map(results, param_x, param_y, score, n_top = 20, best_scores_coe
 
 
 # %%
-hyperparam_map(results, param_x = 'C', param_y = 'gamma', score = 'mean_test_balanced_accuracy', n_top = 20, figsize = (10,10))
+hyperparam_map(random_search.cv_results_, param_x = 'C', param_y = 'gamma', score = 'mean_test_balanced_accuracy', n_top = 20, figsize = (10,10))
+title = 'CV balanced accuracy for SVC hyperparameters search'
+plt.title(title)
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
+hyperparam_map(random_search.cv_results_, param_x = 'C', param_y = 'gamma', score = 'mean_test_accuracy', n_top = 20, figsize = (10,10))
+title = 'CV accuracy for SVC hyperparameters search'
+plt.title(title)
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
+
+# %% [markdown]
+# #### Zoomed hyperparameters search
+
+# %%
+clf = SVC(class_weight = 'balanced')
+
+# specify parameters and distributions to sample from
+param_dist = {'C': loguniform(1e-2, 1e4),
+              'gamma': loguniform(1e-8, 1e-1)}
+
+# run randomized search
+n_iter_search = 2000
+random_search_zoom = RandomizedSearchCV(clf, param_distributions=param_dist,
+                                   n_iter=n_iter_search,
+                                   n_jobs=nb_cores-1,
+                                   scoring=['accuracy', 'balanced_accuracy'],
+                                   refit='balanced_accuracy',
+                                   random_state=0)
+
+start = time()
+random_search_zoom.fit(X, y_true)
+end = time()
+print("RandomizedSearchCV took %.2f seconds for %d candidates"
+      " parameter settings." % ((end - start), n_iter_search))
+
+report_multiple(random_search_zoom.cv_results_)
+
+t = time.localtime()
+timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
+cv_search_zoom= cv_to_df(random_search_zoom.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
+cv_search_zoom.to_csv(f'../data/processed/random_search_cv_zoom_results-{timestamp}.csv', index=False)
+
+# %%
+hyperparam_map(random_search_zoom.cv_results_, param_x = 'C', param_y = 'gamma', score = 'mean_test_balanced_accuracy', n_top = 20, figsize = (10,10))
+title = 'CV balanced accuracy for SVC zoomed hyperparameters search'
+plt.title(title)
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
+hyperparam_map(random_search_zoom.cv_results_, param_x = 'C', param_y = 'gamma', score = 'mean_test_accuracy', n_top = 20, figsize = (10,10))
+title = 'CV accuracy for SVC zoomed hyperparameters search'
+plt.title(title)
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # ### Top-down elimination of variables
