@@ -3,3 +3,4 @@
 data/raw/
 ideas.md
 *.png
+*dask-worker-space*
