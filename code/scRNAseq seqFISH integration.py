@@ -15,7 +15,7 @@
 # ---
 
 # %% [markdown]
-# # scRNAsed seqFISH integration
+# # scRNAseq seqFISH integration
 
 # %% [markdown]
 # This is a Jupytext file, i.e. a python script that can be used directly with a standard editor (Spyder, PyCharm, VS Code, ...) or as a JupyterLab notebook.  
@@ -112,6 +112,9 @@ seqFISH_coords.head()
 # %% [markdown]
 # ### Gene expression statistics
 
+# %% [markdown]
+# #### Separate statistics
+
 # %%
 scRNAseq_stats = scRNAseq.describe().iloc[1:,:] # iloc to skip the `count` statistics
 seqFISH_stats = seqFISH.describe().iloc[1:,:] # iloc to skip the `count` statistics
@@ -127,7 +130,42 @@ seqFISH_stats.T.hist(figsize=(17,8), sharex=True)
 plt.suptitle('Summary statistics for seqFISH data')
 
 # %% [markdown]
-# So as stated in the documentation of the original BIRS repository, the scRNAseq data and seqFISH data are normalized, we shouldn't need to process them further.
+# So as stated in the documentation of the original BIRS repository, the scRNAseq data and seqFISH data are normalized, we shouldn't need to process them further.  
+
+# %% [markdown]
+# #### Differences in distributions's statistics
+
+# %%
+diff_stats = seqFISH_stats - scRNAseq_stats
+diff_stats.T.hist(figsize=(17,8), sharex=True)
+plt.suptitle('Differences in summary statistics')
+
+# %% [markdown]
+# The distributions of gene expression data are very comparable between the 2 datasets.  
+# If we use a standard scaler, does it make them more comparable?
+
+# %%
+from sklearn.preprocessing import StandardScaler
+
+scRNAseq_scaled = StandardScaler().fit_transform(scRNAseq)
+seqFISH_scaled = StandardScaler().fit_transform(seqFISH)
+# convert it to DataFrame to use convenient methods
+gene_names = scRNAseq.columns
+scRNAseq_scaled = pd.DataFrame(data=scRNAseq_scaled, columns=gene_names)
+seqFISH_scaled = pd.DataFrame(data=seqFISH_scaled, columns=gene_names)
+# compute the statistics
+scRNAseq_stats_scaled = scRNAseq_scaled.describe().iloc[1:,:] # iloc to skip the `count` statistics
+seqFISH_stats_scaled = seqFISH_scaled.describe().iloc[1:,:] # iloc to skip the `count` statistics
+scRNAseq_stats_scaled.index.name = 'statistics'
+seqFISH_stats_scaled.index.name = 'statistics'
+
+# %%
+diff_stats_scaled = seqFISH_stats_scaled - scRNAseq_stats_scaled
+diff_stats_scaled.T.hist(figsize=(17,8), sharex=True)
+plt.suptitle('Differences in summary statistics of scaled data')
+
+# %% [markdown]
+# Differences between distributions are lower when both datasets are scaled with indepent/dedicated scaler (parameters)
 
 # %% [markdown]
 # ### Check data transformations with selected genes
@@ -867,12 +905,14 @@ elimination_report = np.loadtxt("../data/processed/elimination_report-balanced-a
 # Keep the minimum number of genes that lead to good predictions
 genes_elim = elimination_report[:93,0].astype(int)
 
-Xtest = scaler.transform(scRNAseq)
+scaler = StandardScaler()
+Xtest = scaler.fit_transform(scRNAseq)
 Xpred = scaler.transform(seqFISH)  
 for i in genes_elim:
     Xtest= np.delete(Xtest, i, axis=1)
     Xpred= np.delete(Xpred, i, axis=1)
     # should we use a different scaler for the seqFISH data?
+    # like StandardScaler().fit_transform(scRNseqFISHAseq)
     # that depends the distributions' similarity with the scRNAseq data
 
 # %% [markdown]
