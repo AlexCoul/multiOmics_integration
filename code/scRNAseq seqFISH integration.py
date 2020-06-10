@@ -41,6 +41,18 @@ from path import Path
 from time import time
 import copy
 
+from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC, LinearSVC
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import cross_validate, GridSearchCV, RandomizedSearchCV
+from scipy.stats import loguniform
+
+import umap
+# if not installed run: conda install -c conda-forge umap-learn
+import hdbscan
+from sklearn.cluster import OPTICS, cluster_optics_dbscan
+
 # %%
 # %qtconsole
 
@@ -98,6 +110,23 @@ counts
 # Tha classes are higly imbalanced.
 
 # %% [markdown]
+# #### label re-encoding
+
+# %%
+# we transform Tasic's phenotypes from strings to integers
+# for their visualization on projections
+
+from sklearn import preprocessing
+le = preprocessing.LabelEncoder()
+phenotypes = list(scRNAseq_labels.iloc[:,0].unique())
+le.fit(phenotypes)
+
+y_true = le.transform(scRNAseq_labels.iloc[:,0])
+
+# colors of data points according to their phenotypes
+colors = [sns.color_palette()[x] for x in y_true]
+
+# %% [markdown]
 # ### seqFISH coordinates
 
 # %% [markdown]
@@ -146,8 +175,6 @@ plt.suptitle('Differences in summary statistics')
 # If we use a standard scaler, does it make them more comparable?
 
 # %%
-from sklearn.preprocessing import StandardScaler
-
 scRNAseq_scaled = StandardScaler().fit_transform(scRNAseq)
 seqFISH_scaled = StandardScaler().fit_transform(seqFISH)
 # convert it to DataFrame to use convenient methods
@@ -245,27 +272,6 @@ plt.tight_layout()
 # %% [markdown]
 # ### Check data transformations with UMAP projections
 
-# %%
-import umap
-# if not installed run: conda install -c conda-forge umap-learn
-
-# %% [markdown]
-# #### label re-encoding
-
-# %%
-# we transform Tasic's phenotypes from strings to integers
-# for their visualization on projections
-
-from sklearn import preprocessing
-le = preprocessing.LabelEncoder()
-phenotypes = list(scRNAseq_labels.iloc[:,0].unique())
-le.fit(phenotypes)
-
-y_true = le.transform(scRNAseq_labels.iloc[:,0])
-
-# colors of data points according to their phenotypes
-colors = [sns.color_palette()[x] for x in y_true]
-
 # %% [markdown]
 # #### scRNAseq transformation and projection
 
@@ -311,15 +317,14 @@ plt.tight_layout()
 # We train and test the models with the scRNAseq data, assuming Tasic's phenotypes definition is the gold standard.
 
 # %%
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-X = scaler.fit_transform(scRNAseq)
-
-# %%
 from multiprocessing import cpu_count
 
 nb_cores = cpu_count()
 print(f"There are {nb_cores} available cores")
+
+# %%
+scaler = StandardScaler()
+X = scaler.fit_transform(scRNAseq)
 
 # %% [markdown]
 # ### Test kNN
@@ -328,10 +333,6 @@ print(f"There are {nb_cores} available cores")
 # To test the minimum number of genes required for cell phenotype classification, we try quickly the k-nearest neighbors model.
 
 # %%
-from sklearn.metrics import accuracy_score
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import cross_validate
-
 clf = KNeighborsClassifier(n_neighbors=10)
 cv = cross_validate(clf, X, y_true,
                     cv=10,
@@ -352,8 +353,6 @@ print(f"Balanced accuracy: {cv['test_balanced_accuracy'].mean():0.2f} (+/- {cv['
 # I just change max_iter to its default -1 (infinite)
 
 # %%
-from sklearn.svm import SVC
-
 clf = SVC(class_weight = 'balanced', tol = 1e-4, C = 1e-6, max_iter = -1)
 cv = cross_validate(clf, X, y_true,
                     cv=10,
@@ -366,8 +365,6 @@ print(f"Balanced accuracy: {cv['test_balanced_accuracy'].mean():0.2f} (+/- {cv['
 # With Zhu's parameters the model is very bad, but they actually used `LinearSVC`!
 
 # %%
-from sklearn.svm import LinearSVC
-
 clf = LinearSVC(class_weight="balanced", dual=False, C = 1e-6, max_iter=10000, tol=1e-4)
 cv = cross_validate(clf, X, y_true,
                     cv=10,
@@ -494,10 +491,6 @@ def cv_to_df(cv, scores, order_by=None, ascending=False):
 # %%
 # # LONG runtime
 
-# from scipy.stats import loguniform
-# from sklearn.svm import SVC
-# from sklearn.model_selection import RandomizedSearchCV
-
 # clf = SVC(class_weight = 'balanced')
 
 # # specify parameters and distributions to sample from
@@ -612,8 +605,6 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
 # # LONG runtime
-
-# from sklearn.model_selection import GridSearchCV
 
 # clf = LinearSVC(class_weight="balanced", dual=False, max_iter=10000)
 
@@ -1181,8 +1172,6 @@ plt.title("Aggregated neighbors' genes data", fontsize=18);
 # #### HDBSCAN
 
 # %%
-import hdbscan
-
 clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20)
 clusterer.fit(neigh_valid)
 print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
@@ -1200,8 +1189,6 @@ print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
 # a minkowsky distance with `p=2` is the euclidian distance, so that's fine
 
 # %%
-from sklearn.cluster import OPTICS, cluster_optics_dbscan
-
 clust = OPTICS()
 # Run the fit
 clust.fit(neigh_valid)
@@ -1234,8 +1221,6 @@ plt.scatter(embedding[:, 0], embedding[:, 1], c='blue', marker=marker, s=size_po
 plt.title("Overview of aggregated neighbors' genes data", fontsize=18);
 
 # %%
-import hdbscan
-
 clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
 clusterer.fit(embedding)
 print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
@@ -1305,5 +1290,3 @@ ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
 # It would be interesting to check that in a further analysis.  
 #
 # An interesting lead could be, for each cell, retrieve the mean values of its corresponding phenotype (the 'signature' of the phenotype), and then run again an aggregated neighbors' gene expression analysis. That could emphasise the genes that are under or over expressed due to the localisation of the cells and eliminate the strong contributions of genes that are specific of cell type.
-
-# %%
