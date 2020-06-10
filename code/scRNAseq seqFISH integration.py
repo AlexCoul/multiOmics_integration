@@ -136,7 +136,7 @@ colors = [sns.color_palette()[x] for x in y_true]
 seqFISH_coords = pd.read_csv(seqFISH_coords_path, sep=' ', header=None, usecols=[2,3], names=['x','y'])
 seqFISH_coords.head()
 
-# %% [markdown]
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Exploratory Data Analysis
 
 # %% [markdown]
@@ -310,7 +310,7 @@ plt.tight_layout()
 # **Conclusion**  
 # We will simply work on the data given by the workshop organizers as gene expression data are already well processed.
 
-# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Map non spatial scRNAseq data to spatial seqFISH data
 
 # %% [markdown]
@@ -951,7 +951,9 @@ elimination_report = np.loadtxt("../data/processed/elimination_report-balanced-a
 
 # Keep the minimum number of genes that lead to good predictions
 gene_names = list(scRNAseq.columns)
-genes_elim_id = elimination_report[:93,0].astype(int)
+# nb_elim = 86 # optimal number of genes to discard
+nb_elim = 93 # eliminate more genes, with still good performance
+genes_elim_id = elimination_report[:nb_elim,0].astype(int)
 genes_elim = successive_elimination(gene_names, genes_elim_id)
 
 scRNAseq_drop = copy.deepcopy(scRNAseq)
@@ -1074,9 +1076,14 @@ y_pred = clf.predict(Xpred)
 from matplotlib.colors import ListedColormap
 my_cmap = ListedColormap(sns.color_palette().as_hex())
 
-plt.figure(figsize=[10,10])
-plt.scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=my_cmap, marker='o', s=5)
-plt.title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+fig, ax = plt.subplots(figsize=[10,10])
+scatter = ax.scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=my_cmap, marker='o', s=5)
+# produce a legend with the unique colors from the scatter
+legend1 = ax.legend(*scatter.legend_elements(), loc="upper right", title="Classes")
+ax.add_artist(legend1)
+title = 'Spatial map of prediction of phenotypes for seqFISH data'
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
 pheno_id, counts = np.unique(y_pred, return_counts=True)
@@ -1086,10 +1093,26 @@ pd.DataFrame(data={'phenotype':pheno_names,
              index=pheno_id)
 
 # %% [markdown]
+# There are only 3 cell types predicted, we are missing:
+# - Endothelial Cell
+# - Microglia
+# - Oligodendrocyte.1
+# - Oligodendrocyte.2
+# - Oligodendrocyte.3
+
+# %% [markdown]
 # ## Spatial analysis
 
 # %% [markdown]
+# The main idea is to reconstruct the spatial network of cells, where nodes are cells and edges link neighboring cells.  
+# We will use this network to analyse how neighboring cells (linked nodes) can define a spacially coherent area.
+
+# %% [markdown]
 # ### Network reconstruction
+
+# %% [markdown]
+# We use Voronoi tessellation to define the edges that link neighboring cells.  
+# Voroinoi tessellation defines virtual cell boundaries, and we link cells that share boundaries.
 
 # %%
 from scipy.spatial import Voronoi
@@ -1103,14 +1126,21 @@ voro_cells[:,[2,3]] = seqFISH_coords.loc[vor.ridge_points[:,1], ['x','y']]
 distances = np.sqrt((voro_cells[:,0]-voro_cells[:,2])**2+(voro_cells[:,1]-voro_cells[:,3])**2)
 
 # %%
-EDGE_DIST_THRESH = 300 # distance threshold to discard edges below it
+# distance threshold to discard edges above it
+#  mainly artifacts at the borders of the whole dataset
+EDGE_DIST_THRESH = 300 
 selection = distances < EDGE_DIST_THRESH
 
-plt.figure(figsize=[15,15])
+fig, ax = plt.subplots(figsize=[15,15])
 for points in voro_cells[selection,:]:
-    plt.plot(points[[0,2]],points[[1,3]], 'k-', alpha=0.5)
-plt.scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=10)
-plt.title('Spatial network of seqFISH data', fontsize=18);
+    ax.plot(points[[0,2]],points[[1,3]], 'k-', alpha=0.5)
+scatter = ax.scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=my_cmap, marker='o', s=20)
+# produce a legend with the unique colors from the scatter
+legend1 = ax.legend(*scatter.legend_elements(), loc="upper right", title="Classes")
+ax.add_artist(legend1)
+title = 'Spatial network of seqFISH data'
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # I have to fix the colour display of the nodes... :-/
