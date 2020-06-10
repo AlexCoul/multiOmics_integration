@@ -1073,14 +1073,28 @@ clf.fit(Xtest, y_true)
 y_pred = clf.predict(Xpred)
 
 # %%
-from matplotlib.colors import ListedColormap
-my_cmap = ListedColormap(sns.color_palette().as_hex())
+base_cmap = sns.color_palette('muted').as_hex() # plt.get_cmap("Set1")
+
+# make a custom colormap with class integers, labels and hex colors like
+# [[0, 'Astrocyte', '#023eff'],
+#  [2, 'GABA-ergic Neuron', '#ff7c00'],
+#  [3, 'Glutamatergic Neuron', '#1ac938']]
+# 
+# color_labels = []
+# for i, i_pred in enumerate(np.unique(y_pred)):
+#     color_labels.append([i_pred, le.inverse_transform([i_pred])[0], base_cmap[i]])
+
+# more custom colormap, switch to previous line if any issue like different class integers
+color_labels = [[0, le.inverse_transform([0])[0], base_cmap[0]],
+                [2, le.inverse_transform([2])[0], base_cmap[1]],
+                [3, le.inverse_transform([3])[0], base_cmap[2]]]
 
 fig, ax = plt.subplots(figsize=[10,10])
-scatter = ax.scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=my_cmap, marker='o', s=5)
-# produce a legend with the unique colors from the scatter
-legend1 = ax.legend(*scatter.legend_elements(), loc="upper right", title="Classes")
-ax.add_artist(legend1)
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax.scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=10)
+plt.legend()
+
 title = 'Spatial map of prediction of phenotypes for seqFISH data'
 plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
@@ -1133,11 +1147,12 @@ selection = distances < EDGE_DIST_THRESH
 
 fig, ax = plt.subplots(figsize=[15,15])
 for points in voro_cells[selection,:]:
-    ax.plot(points[[0,2]],points[[1,3]], 'k-', alpha=0.5)
-scatter = ax.scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=my_cmap, marker='o', s=20)
-# produce a legend with the unique colors from the scatter
-legend1 = ax.legend(*scatter.legend_elements(), loc="upper right", title="Classes")
-ax.add_artist(legend1)
+    ax.plot(points[[0,2]],points[[1,3]], c='k',zorder=0, alpha=0.5)
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax.scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+plt.legend()
+
 title = 'Spatial network of seqFISH data'
 plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
