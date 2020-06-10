@@ -1145,7 +1145,7 @@ distances = np.sqrt((voro_cells[:,0]-voro_cells[:,2])**2+(voro_cells[:,1]-voro_c
 EDGE_DIST_THRESH = 300 
 selection = distances < EDGE_DIST_THRESH
 
-fig, ax = plt.subplots(figsize=[15,15])
+fig, ax = plt.subplots(figsize=[15, 15])
 for points in voro_cells[selection,:]:
     ax.plot(points[[0,2]],points[[1,3]], c='k',zorder=0, alpha=0.5)
 for class_pred, label, color in color_labels:
@@ -1158,25 +1158,26 @@ plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
-# I have to fix the colour display of the nodes... :-/
-
-# %% [markdown]
 # The next step is, for each node, look at its neighboors, and aggregate in some way their gene expression data.  
 # In the first place I think about mean and variance in order to capture the (non)homogeneity of cell types in the area.
 
 # %% [markdown]
 # ### Neighbors gene expression aggregation
 
+# %% [markdown]
+# #### Aggregation
+
 # %%
-nb_cells = Xtest.shape[0]
-nb_genes = Xtest.shape[1]
+# array to store aggregated data
+nb_cells = Xpred.shape[0]
+nb_genes = Xpred.shape[1]
 genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
 pair_points = vor.ridge_points[selection,:]
 
 for i in range(nb_cells):
+    # array of neighbors of a given node
     left_neigh = pair_points[pair_points[:,1] == i, 0]
     right_neigh = pair_points[pair_points[:,0] == i, 1]
-    # array of all neighboors of node i
     neigh = np.hstack( (left_neigh, right_neigh) ).flatten()
     
     if neigh.size != 0:
@@ -1185,6 +1186,8 @@ for i in range(nb_cells):
     else:
         genes_aggreg[i,:] = None
 
+# the following lines were needed when I made the error of
+# using Xtest instead of Xpred, the indices didn't match
 error_cells = np.isnan(genes_aggreg[:,0])
 nb_errors = error_cells.sum()
 print(f"There has been {nb_errors}/{nb_cells} cells set to NaN")
@@ -1193,15 +1196,21 @@ print(f"There has been {nb_errors}/{nb_cells} cells set to NaN")
 neigh_valid = genes_aggreg[~error_cells,:]
 
 # %% [markdown]
-# ### Neighbors aggregated genes visualization
+# #### Visualization
+
+# %%
+marker = 'o'
+size_points = 10
+colormap = 'tab10'
 
 # %%
 reducer = umap.UMAP()
 embedding = reducer.fit_transform(neigh_valid)
 embedding.shape
 
+# %%
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c='blue', marker=marker, s=size_points)
+plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
 plt.title("Aggregated neighbors' genes data", fontsize=18);
 
 # %% [markdown]
@@ -1242,6 +1251,14 @@ clust.fit(neigh_valid)
 clust.labels_.max()
 
 # %%
+class_id, class_count = np.unique(clust.labels_, return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
+
+# %% [markdown]
+# Most of points are classified as `-1`, which mean noise, which is bad!
+
+# %%
 plt.figure(figsize=[10,10])
 plt.scatter(embedding[:, 0], embedding[:, 1], c=clust.labels_, cmap=colormap, marker=marker, s=size_points)
 plt.title("Aggregated neighbors' genes data", fontsize=18);
@@ -1254,6 +1271,9 @@ plt.title("Aggregated neighbors' genes data", fontsize=18);
 # %% [markdown]
 # #### HDBSCAN on reduced space
 
+# %% [markdown]
+# UMAP projection with parameters adapted for clustering
+
 # %%
 embedding = umap.UMAP(n_neighbors=30,
                       min_dist=0.0,
@@ -1262,7 +1282,7 @@ embedding = umap.UMAP(n_neighbors=30,
                       ).fit_transform(neigh_valid)
 
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c='blue', marker=marker, s=size_points)
+plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
 plt.title("Overview of aggregated neighbors' genes data", fontsize=18);
 
 # %%
@@ -1289,7 +1309,13 @@ plt.scatter(embedding[clustered, 0],
             cmap='Spectral');
 plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
 
+# %%
+class_id, class_count = np.unique(labels[clustered], return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
+
 # %% [markdown]
+# This is pretty good :)  
 # Of course one can tweak the parameters to obtain a clustering that fits him better.
 
 # %% [markdown]
@@ -1321,9 +1347,55 @@ ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', font
 ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
 ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
 
+
 # %% [markdown]
 # The detected areas look plausible as points affected to different area types are not randomly dispersed.  
 # Moreover the detected areas span over areas of some phenotypes or form regions smaller than areas of some phenotypes.
+
+# %% [markdown]
+# ### Multiple neighbors
+
+# %% [markdown]
+# We want to aggregate gene expression data up the 2nd, 3rd ot k-th neighbors.
+
+# %%
+def neighbors(pairs, node):
+    """
+    Return the list of neighbors of a node in a network defined 
+    by edges between pairs of nodes. 
+    
+    Parameters
+    ----------
+    pairs : array_like
+        Pairs of nodes' id that define the network's edges.
+    node : int
+        The node from which we look for the neighbors.
+        
+    Returns
+    -------
+    neigh : array_like
+        The indices of neighboring nodes.
+    """
+    
+    
+
+# %%
+nb_cells = Xpred.shape[0]
+nb_genes = Xpred.shape[1]
+genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
+pair_points = vor.ridge_points[selection,:]
+
+for i in range(nb_cells):
+    # array of neighbors of a given node
+    left_neigh = pair_points[pair_points[:,1] == i, 0]
+    right_neigh = pair_points[pair_points[:,0] == i, 1]
+    neigh = np.hstack( (left_neigh, right_neigh) ).flatten()
+    
+    if neigh.size != 0:
+        genes_aggreg[i,:nb_genes] = Xtest[neigh,:].mean(axis=0)
+        genes_aggreg[i,-nb_genes:] = Xtest[neigh,:].std(axis=0)
+    else:
+        genes_aggreg[i,:] = None
 
 # %% [markdown]
 # ## Conclusion
