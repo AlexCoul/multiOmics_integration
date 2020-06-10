@@ -28,7 +28,7 @@
 # - find the minimum number of genes required for this mapping
 # - investigate on whether there are some signatures in non spatial scRNAseq data about the spatial organisation of cells
 
-# %% [markdown]
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Imports
 
 # %%
@@ -39,6 +39,7 @@ import seaborn as sns
 import os
 from path import Path
 from time import time
+import copy
 
 # %%
 # %qtconsole
@@ -162,10 +163,13 @@ seqFISH_stats_scaled.index.name = 'statistics'
 # %%
 diff_stats_scaled = seqFISH_stats_scaled - scRNAseq_stats_scaled
 diff_stats_scaled.T.hist(figsize=(17,8), sharex=True)
-plt.suptitle('Differences in summary statistics of scaled data')
+
+plt.suptitle('Differences in summary statistics of scaled datasets');
 
 # %% [markdown]
-# Differences between distributions are lower when both datasets are scaled with indepent/dedicated scaler (parameters)
+# With a dedicated scaler object for each dataset, their distribution statistics are more comparable.  
+# We will use dedicated scaler objects to improve the applicability to seqFISH of a classifier trained on scRNAseq.
+
 
 # %% [markdown]
 # ### Check data transformations with selected genes
@@ -302,7 +306,7 @@ plt.tight_layout()
 # **Conclusion**  
 # We will simply work on the data given by the workshop organizers as gene expression data are already well processed.
 
-# %% [markdown]
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Map non spatial scRNAseq data to spatial seqFISH data
 
 # %% [markdown]
@@ -398,39 +402,14 @@ cv = cross_validate(clf, X, y_true,
 print(f"Accuracy: {cv['test_accuracy'].mean():0.2f} (+/- {cv['test_accuracy'].std()*2:0.2f})")
 print(f"Balanced accuracy: {cv['test_balanced_accuracy'].mean():0.2f} (+/- {cv['test_balanced_accuracy'].std()*2:0.2f})")
 
+
 # %% [markdown]
 # Linear SVC with default parameters is better than with Zhu's, but not than kernel SVC.
 
-# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ### Find optimal hyperparameters for kernel SVC
 
 # %%
-from scipy.stats import loguniform
-from sklearn.svm import SVC
-from sklearn.model_selection import RandomizedSearchCV
-
-clf = SVC(class_weight = 'balanced')
-
-# specify parameters and distributions to sample from
-param_dist = {'C': loguniform(1e-8, 1e4),
-              'gamma': loguniform(1e-8, 1e4)}
-
-# run randomized search
-n_iter_search = 4000
-random_search = RandomizedSearchCV(clf, param_distributions=param_dist,
-                                   n_iter=n_iter_search,
-                                   n_jobs=nb_cores-1,
-                                   scoring=['accuracy', 'balanced_accuracy'],
-                                   refit='balanced_accuracy',
-                                   random_state=0)
-
-start = time.time()
-random_search.fit(X, y_true)
-end = time.time()
-print("RandomizedSearchCV took %.2f seconds for %d candidates"
-      " parameter settings." % ((end - start), n_iter_search))
-
-
 # Utility function to report best hyperparameters sets
 def report(results, n_top=3):
     for i in range(1, n_top + 1):
@@ -458,9 +437,6 @@ def report_multiple(results, n_top=3, scores=['balanced_accuracy','accuracy']):
             print(f"Parameters: {params}")
             print("")
 
-report_multiple(random_search.cv_results_)
-
-# %%
 import json
 
 # Utility function to save best hyperparameters sets
@@ -516,6 +492,38 @@ def cv_to_df(cv, scores, order_by=None, ascending=False):
         
     return df
 
+
+# %%
+# # LONG runtime
+
+# from scipy.stats import loguniform
+# from sklearn.svm import SVC
+# from sklearn.model_selection import RandomizedSearchCV
+
+# clf = SVC(class_weight = 'balanced')
+
+# # specify parameters and distributions to sample from
+# param_dist = {'C': loguniform(1e-8, 1e4),
+#               'gamma': loguniform(1e-8, 1e4)}
+
+# # run randomized search
+# n_iter_search = 4000
+# random_search = RandomizedSearchCV(clf, param_distributions=param_dist,
+#                                    n_iter=n_iter_search,
+#                                    n_jobs=nb_cores-1,
+#                                    scoring=['accuracy', 'balanced_accuracy'],
+#                                    refit='balanced_accuracy',
+#                                    random_state=0)
+
+# start = time.time()
+# random_search.fit(X, y_true)
+# end = time.time()
+# print("RandomizedSearchCV took %.2f seconds for %d candidates"
+#       " parameter settings." % ((end - start), n_iter_search))
+
+# report_multiple(random_search.cv_results_)
+
+# %%
 t = time.localtime()
 timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
 
@@ -559,33 +567,34 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # #### Zoomed hyperparameters search
 
 # %%
-clf = SVC(class_weight = 'balanced')
+# # LONG runtime
+# clf = SVC(class_weight = 'balanced')
 
-# specify parameters and distributions to sample from
-param_dist = {'C': loguniform(1e-2, 1e4),
-              'gamma': loguniform(1e-8, 1e-1)}
+# # specify parameters and distributions to sample from
+# param_dist = {'C': loguniform(1e-2, 1e4),
+#               'gamma': loguniform(1e-8, 1e-1)}
 
-# run randomized search
-n_iter_search = 2000
-random_search_zoom = RandomizedSearchCV(clf, param_distributions=param_dist,
-                                   n_iter=n_iter_search,
-                                   n_jobs=nb_cores-1,
-                                   scoring=['accuracy', 'balanced_accuracy'],
-                                   refit='balanced_accuracy',
-                                   random_state=0)
+# # run randomized search
+# n_iter_search = 2000
+# random_search_zoom = RandomizedSearchCV(clf, param_distributions=param_dist,
+#                                    n_iter=n_iter_search,
+#                                    n_jobs=nb_cores-1,
+#                                    scoring=['accuracy', 'balanced_accuracy'],
+#                                    refit='balanced_accuracy',
+#                                    random_state=0)
 
-start = time.time()
-random_search_zoom.fit(X, y_true)
-end = time.time()
-print("RandomizedSearchCV took %.2f seconds for %d candidates"
-      " parameter settings." % ((end - start), n_iter_search))
+# start = time.time()
+# random_search_zoom.fit(X, y_true)
+# end = time.time()
+# print("RandomizedSearchCV took %.2f seconds for %d candidates"
+#       " parameter settings." % ((end - start), n_iter_search))
 
-report_multiple(random_search_zoom.cv_results_)
+# report_multiple(random_search_zoom.cv_results_)
 
-t = time.localtime()
-timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
-cv_search_zoom= cv_to_df(random_search_zoom.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
-cv_search_zoom.to_csv(f'../data/processed/random_search_cv_zoom_results-{timestamp}.csv', index=False)
+# t = time.localtime()
+# timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
+# cv_search_zoom= cv_to_df(random_search_zoom.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
+# cv_search_zoom.to_csv(f'../data/processed/random_search_cv_zoom_results-{timestamp}.csv', index=False)
 
 # %%
 hyperparam_map(random_search_zoom.cv_results_, param_x = 'C', param_y = 'gamma', score = 'mean_test_balanced_accuracy', n_top = 20, figsize = (10,10))
@@ -600,32 +609,34 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # %% [markdown]
 # Best hyperparameters are higher for simple accuracy than for balanced accuracy
 
-# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ### Find optimal hyperparameters for Linear SVC
 
 # %%
-from sklearn.model_selection import GridSearchCV
+# # LONG runtime
 
-clf = LinearSVC(class_weight="balanced", dual=False, max_iter=10000)
+# from sklearn.model_selection import GridSearchCV
 
-# specify parameters and distributions to sample from
-nb_candidates = 600
-param_grid = {'C': np.logspace(start=-8, stop=4, num=nb_candidates, endpoint=True, base=10.0)}
+# clf = LinearSVC(class_weight="balanced", dual=False, max_iter=10000)
 
-# run grid search
-grid_search = GridSearchCV(clf,
-                           param_grid=param_grid,
-                           n_jobs=nb_cores-1,
-                           scoring=['accuracy', 'balanced_accuracy'],
-                           refit='balanced_accuracy')
+# # specify parameters and distributions to sample from
+# nb_candidates = 600
+# param_grid = {'C': np.logspace(start=-8, stop=4, num=nb_candidates, endpoint=True, base=10.0)}
 
-start = time.time()
-grid_search.fit(X, y_true)
-end = time.time()
-print("GridSearchCV took %.2f seconds for %d candidates"
-      " parameter settings." % ((end - start), nb_candidates))
+# # run grid search
+# grid_search = GridSearchCV(clf,
+#                            param_grid=param_grid,
+#                            n_jobs=nb_cores-1,
+#                            scoring=['accuracy', 'balanced_accuracy'],
+#                            refit='balanced_accuracy')
 
-report_multiple(grid_search.cv_results_)
+# start = time.time()
+# grid_search.fit(X, y_true)
+# end = time.time()
+# print("GridSearchCV took %.2f seconds for %d candidates"
+#       " parameter settings." % ((end - start), nb_candidates))
+
+# report_multiple(grid_search.cv_results_)
 
 # %%
 t = time.localtime()
@@ -809,62 +820,62 @@ plt.title('Accuracy of scRNAseq classification during variables (genes) eliminat
 # %%
 # If you want to run the LONG top-dpwn elimination of variables, uncomment and run this:
 
-# cross_val_score because now we only look at balanced_accuracy
-from sklearn.model_selection import cross_val_score
+# # cross_val_score because now we only look at balanced_accuracy
+# from sklearn.model_selection import cross_val_score
 
-# if you have run the parameter search in the 2nd previous cell
-# C = random_search_zoom.best_params_['C']
-# gamma = random_search_zoom.best_params_['gamma']
-# or if you need to load search results previously saved:
-param_search = pd.read_csv('../data/processed/grid_search_cv_results-2020-06-09_18h36.csv')
-scoring = 'accuracy'
-best = param_search.loc[param_search['rank '+scoring]==1]
-C = best['C'].values[0]
+# # if you have run the parameter search in the 2nd previous cell
+# # C = random_search_zoom.best_params_['C']
+# # gamma = random_search_zoom.best_params_['gamma']
+# # or if you need to load search results previously saved:
+# param_search = pd.read_csv('../data/processed/grid_search_cv_results-2020-06-09_18h36.csv')
+# scoring = 'accuracy'
+# best = param_search.loc[param_search['rank '+scoring]==1]
+# C = best['C'].values[0]
 
-clf = LinearSVC(C=C, class_weight='balanced', dual=False, max_iter=10000)
-Xelim = np.copy(X) # the X data that will be pruned
+# clf = LinearSVC(C=C, class_weight='balanced', dual=False, max_iter=10000)
+# Xelim = np.copy(X) # the X data that will be pruned
 
-elimination_report = []
+# elimination_report = []
 
-def score_leaveoneout(clf, y_true, Xelim, var, scoring):
-    Xtest = np.delete(Xelim, var, axis=1)
-    score = cross_val_score(clf, Xtest, y_true,
-                            cv=5,
-                            n_jobs=5,
-                            scoring=scoring).mean()
-    return score
+# def score_leaveoneout(clf, y_true, Xelim, var, scoring):
+#     Xtest = np.delete(Xelim, var, axis=1)
+#     score = cross_val_score(clf, Xtest, y_true,
+#                             cv=5,
+#                             n_jobs=5,
+#                             scoring=scoring).mean()
+#     return score
 
-Nvar = X.shape[1]
-start = time.time()
-for i in range(Nvar-1):
-    print("Removing {} variables".format(i+1), end="    ")
-    scores = []
-    for var in range(Xelim.shape[1]):
-        score = delayed(score_leaveoneout)(clf, y_true, Xelim, var, scoring)
-        scores.append(score)
+# Nvar = X.shape[1]
+# start = time.time()
+# for i in range(Nvar-1):
+#     print("Removing {} variables".format(i+1), end="    ")
+#     scores = []
+#     for var in range(Xelim.shape[1]):
+#         score = delayed(score_leaveoneout)(clf, y_true, Xelim, var, scoring)
+#         scores.append(score)
 
-    # find the variable that was the less usefull for the model
-    maxi_score = delayed(max)(scores)
-    worst_var = delayed(list.index)(scores, maxi_score)
-    maxi_score = maxi_score.compute()
-    worst_var = worst_var.compute()
-    print("eliminating var n°{}, the score was {:.6f}".format(worst_var, maxi_score))
-    elimination_report.append([worst_var, maxi_score])
-    # eliminate this variable for next round
-    Xelim = np.delete(Xelim, worst_var, axis=1)
+#     # find the variable that was the less usefull for the model
+#     maxi_score = delayed(max)(scores)
+#     worst_var = delayed(list.index)(scores, maxi_score)
+#     maxi_score = maxi_score.compute()
+#     worst_var = worst_var.compute()
+#     print("eliminating var n°{}, the score was {:.6f}".format(worst_var, maxi_score))
+#     elimination_report.append([worst_var, maxi_score])
+#     # eliminate this variable for next round
+#     Xelim = np.delete(Xelim, worst_var, axis=1)
     
-end = time.time()
-duration = end-start
-print(f"the computation lasted {duration:.1f}s")
-elimination_report = np.array(elimination_report)
-t = time.localtime()
-timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
-np.savetxt(f"../data/processed/elimination_report_linearSVC-{scoring}-{timestamp}.csv",
-           elimination_report,
-           delimiter=',',
-           header='var index, score',
-           comments='',
-           fmt=['%d', '%f'])
+# end = time.time()
+# duration = end-start
+# print(f"the computation lasted {duration:.1f}s")
+# elimination_report = np.array(elimination_report)
+# t = time.localtime()
+# timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
+# np.savetxt(f"../data/processed/elimination_report_linearSVC-{scoring}-{timestamp}.csv",
+#            elimination_report,
+#            delimiter=',',
+#            header='var index, score',
+#            comments='',
+#            fmt=['%d', '%f'])
 
 # %% [markdown]
 # #### elimination with balanced accuracy
@@ -893,8 +904,55 @@ plt.xlabel('nb remaining variables + 1')
 plt.ylabel('score')
 plt.title('Accuracy of scRNAseq classification with Linear SVC during variables (genes) elimination');
 
+
 # %% [markdown]
-# ### Infer cell types from restricted gene list
+# These plots confirm that Zhu *et al.* probably used the simple accuracy instead of the balanced accuracy.  
+# The kernel SVC require fewer genes (\~19-29) than the linear SVC (\~35-39) to maintain a relatively high score.
+
+# %% [markdown]
+# ## Infer cell types from restricted gene list
+
+# %%
+def successive_elimination(list_elems, elems_id, remaining=False):
+    """
+    Compute the list of elements that remain or that are eliminated 
+    after successive deletions at indicated indices.
+    
+    Parameters
+    ----------
+    list_elems : list
+        A list of elements that can be eliminated
+    elems_id: list
+        A list of indices where elements are successively deleted
+    remaining: bool, default False
+        If True the function returns a list of remaining elements
+    
+    Returns
+    -------
+    successive : list
+        A list of deleted or remaining elements
+    
+    Examples
+    --------
+    >>> gene_names = list(scRNAseq.columns)
+    >>> genes_elim_id = elimination_report[:93,0].astype(int)
+    >>> genes_elim = successive_elimination(gene_names, genes_elim_id)
+    """
+    
+    from copy import deepcopy
+    elems = deepcopy(list_elems)
+    
+    if remaining:
+        successive = elems
+        for i in elems_id:
+            del elems[i]
+    else:
+        successive = []
+        for i in elems_id:
+            successive.append(elems.pop(i))
+    
+    return successive
+
 
 # %% [markdown]
 # #### Drop genes
@@ -903,49 +961,56 @@ plt.title('Accuracy of scRNAseq classification with Linear SVC during variables 
 elimination_report = np.loadtxt("../data/processed/elimination_report-balanced-accuracy-2020-06-09_13h11.csv", skiprows=1, delimiter=',')
 
 # Keep the minimum number of genes that lead to good predictions
-genes_elim = elimination_report[:93,0].astype(int)
+gene_names = list(scRNAseq.columns)
+genes_elim_id = elimination_report[:93,0].astype(int)
+genes_elim = successive_elimination(gene_names, genes_elim_id)
 
-scaler = StandardScaler()
-Xtest = scaler.fit_transform(scRNAseq)
-Xpred = scaler.transform(seqFISH)  
-for i in genes_elim:
-    Xtest= np.delete(Xtest, i, axis=1)
-    Xpred= np.delete(Xpred, i, axis=1)
-    # should we use a different scaler for the seqFISH data?
-    # like StandardScaler().fit_transform(scRNseqFISHAseq)
-    # that depends the distributions' similarity with the scRNAseq data
+
+scRNAseq_drop = copy.deepcopy(scRNAseq)
+seqFISH_drop = copy.deepcopy(seqFISH)
+
+scRNAseq_drop.drop(columns=genes_elim, inplace=True)
+seqFISH_drop.drop(columns=genes_elim, inplace=True)
+
+scaler_sc = StandardScaler()  # for scRNAseq
+scaler_seq = StandardScaler() # for seqFISH
+Xtest = scaler_sc.fit_transform(scRNAseq_drop)
+Xpred = scaler_seq.fit_transform(seqFISH_drop)  
+
 
 # %% [markdown]
 # #### Re-run hyperparameters search
 
 # %%
-clf = SVC(class_weight = 'balanced')
+# # LONG runtime
 
-# specify parameters and distributions to sample from
-param_dist = {'C': loguniform(1e-8, 1e4),
-              'gamma': loguniform(1e-8, 1e4)}
+# clf = SVC(class_weight = 'balanced')
 
-# run randomized search
-n_iter_search = 4000
-random_search = RandomizedSearchCV(clf, param_distributions=param_dist,
-                                   n_iter=n_iter_search,
-                                   n_jobs=nb_cores-1,
-                                   scoring=['accuracy', 'balanced_accuracy'],
-                                   refit='balanced_accuracy',
-                                   random_state=0)
+# # specify parameters and distributions to sample from
+# param_dist = {'C': loguniform(1e-8, 1e4),
+#               'gamma': loguniform(1e-8, 1e4)}
 
-start = time.time()
-random_search.fit(Xtest, y_true)
-end = time.time()
-print("RandomizedSearchCV took %.2f seconds for %d candidates"
-      " parameter settings." % ((end - start), n_iter_search))
+# # run randomized search
+# n_iter_search = 4000
+# random_search = RandomizedSearchCV(clf, param_distributions=param_dist,
+#                                    n_iter=n_iter_search,
+#                                    n_jobs=nb_cores-1,
+#                                    scoring=['accuracy', 'balanced_accuracy'],
+#                                    refit='balanced_accuracy',
+#                                    random_state=0)
 
-t = time.localtime()
-timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
-cv_search= cv_to_df(random_search.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
-cv_search.to_csv(f'../data/processed/random_search_cv_dropped_genes_results-{timestamp}.csv', index=False)
+# start = time.time()
+# random_search.fit(Xtest, y_true)
+# end = time.time()
+# print("RandomizedSearchCV took %.2f seconds for %d candidates"
+#       " parameter settings." % ((end - start), n_iter_search))
 
-cv_search.head(10)
+# t = time.localtime()
+# timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
+# cv_search= cv_to_df(random_search.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
+# cv_search.to_csv(f'../data/processed/random_search_cv_dropped_genes_results-{timestamp}.csv', index=False)
+
+# cv_search.head(10)
 
 # %% [markdown]
 # #### Map of hyperparameters scores
@@ -964,33 +1029,35 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # #### Zoomed hyperparameters search
 
 # %%
-clf = SVC(class_weight = 'balanced')
+# # LONG runtime
 
-# specify parameters and distributions to sample from
-param_dist = {'C': loguniform(1e-2, 1e4),
-              'gamma': loguniform(1e-8, 1e-1)}
+# clf = SVC(class_weight = 'balanced')
 
-# run randomized search
-n_iter_search = 2000
-random_search_zoom = RandomizedSearchCV(clf, param_distributions=param_dist,
-                                   n_iter=n_iter_search,
-                                   n_jobs=nb_cores-1,
-                                   scoring=['accuracy', 'balanced_accuracy'],
-                                   refit='balanced_accuracy',
-                                   random_state=0)
+# # specify parameters and distributions to sample from
+# param_dist = {'C': loguniform(1e-2, 1e4),
+#               'gamma': loguniform(1e-8, 1e-1)}
 
-start = time.time()
-random_search_zoom.fit(Xtest, y_true)
-end = time.time()
-print("RandomizedSearchCV took %.2f seconds for %d candidates"
-      " parameter settings." % ((end - start), n_iter_search))
+# # run randomized search
+# n_iter_search = 2000
+# random_search_zoom = RandomizedSearchCV(clf, param_distributions=param_dist,
+#                                    n_iter=n_iter_search,
+#                                    n_jobs=nb_cores-1,
+#                                    scoring=['accuracy', 'balanced_accuracy'],
+#                                    refit='balanced_accuracy',
+#                                    random_state=0)
 
-t = time.localtime()
-timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
-cv_search_zoom= cv_to_df(random_search_zoom.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
-cv_search_zoom.to_csv(f'../data/processed/random_search_cv_dropped_genes_zoom_results-{timestamp}.csv', index=False)
+# start = time.time()
+# random_search_zoom.fit(Xtest, y_true)
+# end = time.time()
+# print("RandomizedSearchCV took %.2f seconds for %d candidates"
+#       " parameter settings." % ((end - start), n_iter_search))
 
-cv_search_zoom.head(10)
+# t = time.localtime()
+# timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
+# cv_search_zoom= cv_to_df(random_search_zoom.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
+# cv_search_zoom.to_csv(f'../data/processed/random_search_cv_dropped_genes_zoom_results-{timestamp}.csv', index=False)
+
+# cv_search_zoom.head(10)
 
 # %%
 hyperparam_map(random_search_zoom.cv_results_, param_x = 'C', param_y = 'gamma', score = 'mean_test_balanced_accuracy', n_top = 20, figsize = (10,10))
