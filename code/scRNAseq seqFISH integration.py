@@ -163,11 +163,13 @@ seqFISH_stats_scaled.index.name = 'statistics'
 # %%
 diff_stats_scaled = seqFISH_stats_scaled - scRNAseq_stats_scaled
 diff_stats_scaled.T.hist(figsize=(17,8), sharex=True)
+
 plt.suptitle('Differences in summary statistics of scaled datasets');
 
 # %% [markdown]
 # With a dedicated scaler object for each dataset, their distribution statistics are more comparable.  
 # We will use dedicated scaler objects to improve the applicability to seqFISH of a classifier trained on scRNAseq.
+
 
 # %% [markdown]
 # ### Check data transformations with selected genes
@@ -963,6 +965,7 @@ gene_names = list(scRNAseq.columns)
 genes_elim_id = elimination_report[:93,0].astype(int)
 genes_elim = successive_elimination(gene_names, genes_elim_id)
 
+
 scRNAseq_drop = copy.deepcopy(scRNAseq)
 seqFISH_drop = copy.deepcopy(seqFISH)
 
@@ -973,6 +976,7 @@ scaler_sc = StandardScaler()  # for scRNAseq
 scaler_seq = StandardScaler() # for seqFISH
 Xtest = scaler_sc.fit_transform(scRNAseq_drop)
 Xpred = scaler_seq.fit_transform(seqFISH_drop)  
+
 
 # %% [markdown]
 # #### Re-run hyperparameters search
