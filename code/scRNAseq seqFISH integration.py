@@ -1140,6 +1140,23 @@ voro_cells[:,[2,3]] = seqFISH_coords.loc[vor.ridge_points[:,1], ['x','y']]
 distances = np.sqrt((voro_cells[:,0]-voro_cells[:,2])**2+(voro_cells[:,1]-voro_cells[:,3])**2)
 
 # %%
+fig, ax = plt.subplots(figsize=[15, 15])
+for points in voro_cells[:,:]:
+    ax.plot(points[[0,2]],points[[1,3]], c='k',zorder=0, alpha=0.5)
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax.scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+plt.legend()
+
+title = 'Spatial network of seqFISH data without distance threshold'
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
+
+# %% [markdown]
+# There are many edges that connect nodes on the border of the network, it's only due to Voronoi tessellation and limit conditions.  
+# We need to cut edges that link nodes that are more distant than a given threshold.
+
+# %%
 # distance threshold to discard edges above it
 #  mainly artifacts at the borders of the whole dataset
 EDGE_DIST_THRESH = 300 
@@ -1158,6 +1175,7 @@ plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
+# Instead of cutting edges, we could give them weight thats decrease with distance. But that's an improvement that requires some time to implement.  
 # The next step is, for each node, look at its neighboors, and aggregate in some way their gene expression data.  
 # In the first place I think about mean and variance in order to capture the (non)homogeneity of cell types in the area.
 
@@ -1259,8 +1277,17 @@ plt.title('Clusters histogram');
 # Most of points are classified as `-1`, which mean noise, which is bad!
 
 # %%
+# Define cluster colors to highlight noise
+from bokeh.palettes import Category10
+
+nb_labels = clust.labels_.max()
+palette = Category10[nb_labels]
+palette_grey =  list(Category10[nb_labels])
+palette_grey.append('#C0C0C0')
+clust_colors = [palette_grey[x] for x in clust.labels_]
+
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c=clust.labels_, cmap=colormap, marker=marker, s=size_points)
+plt.scatter(embedding[:, 0], embedding[:, 1], c=clust_colors, marker=marker, s=size_points)
 plt.title("Aggregated neighbors' genes data", fontsize=18);
 
 # %% [markdown]
@@ -1329,8 +1356,19 @@ clust.fit(embedding)
 clust.labels_.max()
 
 # %%
+class_id, class_count = np.unique(clust.labels_, return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
+
+# %%
+nb_labels = clust.labels_.max()
+palette = Category10[nb_labels]
+palette_grey =  list(Category10[nb_labels])
+palette_grey.append('#C0C0C0')
+clust_colors = [palette_grey[x] for x in clust.labels_]
+
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c=clust.labels_, cmap=colormap, marker=marker, s=size_points)
+plt.scatter(embedding[:, 0], embedding[:, 1], c=clust_colors, marker=marker, s=size_points)
 plt.title("OPTICS clustering on aggregated neighbors' genes data", fontsize=18);
 
 # %% [markdown]
