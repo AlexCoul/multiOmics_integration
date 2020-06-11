@@ -1604,7 +1604,7 @@ flatten_neighbors(all_neigh)
 # ### Genes k neighbors aggregation
 
 # %% [markdown]
-#
+# #### 2nd order
 
 # %%
 nb_cells = Xpred.shape[0]
@@ -1613,8 +1613,8 @@ genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance a
 pairs = vor.ridge_points[selection,:]
 
 order = 2
-for n in range(nb_cells):
-    all_neigh = neighbors_k_order(pairs, n=n, order=order)
+for i in range(nb_cells):
+    all_neigh = neighbors_k_order(pairs, n=i, order=order)
     neigh = flatten_neighbors(all_neigh)
     if neigh.size != 0:
         genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
@@ -1622,30 +1622,17 @@ for n in range(nb_cells):
     else:
         genes_aggreg[i,:] = None
 
-# %% [markdown]
-# #### HDBSCAN on reduced space
-
-# %% [markdown]
-# UMAP projection with parameters adapted for clustering
-
 # %%
 embedding = umap.UMAP(n_neighbors=30,
                       min_dist=0.0,
                       n_components=2,
                       random_state=42,
-                      ).fit_transform(neigh_valid)
-
-plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
-plt.title("Overview of aggregated neighbors' genes data", fontsize=18);
+                      ).fit_transform(genes_aggreg)
 
 # %%
 clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
 clusterer.fit(embedding)
 print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
-
-# %% [markdown]
-# we choose `min_samples=1` to avoid having points considered as noise
 
 # %%
 labels = clusterer.labels_
@@ -1662,6 +1649,116 @@ plt.scatter(embedding[clustered, 0],
             s=5,
             cmap='Spectral');
 plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
+
+# %%
+fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
+ax[0].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=size_points)
+ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+
+# %% [markdown]
+# #### 3rd order
+
+# %%
+nb_cells = Xpred.shape[0]
+nb_genes = Xpred.shape[1]
+genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
+pairs = vor.ridge_points[selection,:]
+
+order = 3
+for i in range(nb_cells):
+    all_neigh = neighbors_k_order(pairs, n=i, order=order)
+    neigh = flatten_neighbors(all_neigh)
+    if neigh.size != 0:
+        genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
+        genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
+    else:
+        genes_aggreg[i,:] = None
+
+# %%
+embedding = umap.UMAP(n_neighbors=30,
+                      min_dist=0.0,
+                      n_components=2,
+                      random_state=42,
+                      ).fit_transform(genes_aggreg)
+
+# %%
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+clusterer.fit(embedding)
+print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+
+# %%
+labels = clusterer.labels_
+clustered = (labels >= 0)
+plt.figure(figsize=[10,10])
+plt.scatter(embedding[~clustered, 0],
+            embedding[~clustered, 1],
+            c=(0.5, 0.5, 0.5),
+            s=5,
+            alpha=0.9)
+plt.scatter(embedding[clustered, 0],
+            embedding[clustered, 1],
+            c=labels[clustered],
+            s=5,
+            cmap='Spectral');
+plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
+
+# %%
+fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
+ax[0].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=size_points)
+ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+
+# %% [markdown]
+# #### Higher orders
+
+# %%
+orders = [4, 5, 6]
+
+fig, ax = plt.subplots(nrows=len(orders), ncols=2, figsize=plt.figaspect(1.3)*4)
+for row, order in enumerate(orders):
+    genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
+    pairs = vor.ridge_points[selection,:]
+
+    for i in range(nb_cells):
+        all_neigh = neighbors_k_order(pairs, n=i, order=order)
+        neigh = flatten_neighbors(all_neigh)
+        if neigh.size != 0:
+            genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
+            genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
+        else:
+            genes_aggreg[i,:] = None
+
+    embedding = umap.UMAP(n_neighbors=30,
+                          min_dist=0.0,
+                          n_components=2,
+                          random_state=42,
+                          ).fit_transform(genes_aggreg)
+
+    clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+    clusterer.fit(embedding)
+    print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+
+    labels = clusterer.labels_
+    clustered = (labels >= 0)
+    ax[row,0].scatter(embedding[~clustered, 0],
+                    embedding[~clustered, 1],
+                    c=(0.5, 0.5, 0.5),
+                    s=5,
+                    alpha=0.9)
+    ax[row,0].scatter(embedding[clustered, 0],
+                    embedding[clustered, 1],
+                    c=labels[clustered],
+                    s=5,
+                    cmap='Spectral');
+    ax[row,0].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=15);
+    
+    ax[row,1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
+    ax[row,1].set_title('Spatial map of detected areas for seqFISH data', fontsize=15);
 
 # %% [markdown]
 # ## Conclusion
