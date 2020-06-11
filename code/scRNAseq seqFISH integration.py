@@ -28,7 +28,7 @@
 # - find the minimum number of genes required for this mapping
 # - investigate on whether there are some signatures in non spatial scRNAseq data about the spatial organisation of cells
 
-# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Imports
 
 # %%
@@ -136,7 +136,7 @@ colors = [sns.color_palette()[x] for x in y_true]
 seqFISH_coords = pd.read_csv(seqFISH_coords_path, sep=' ', header=None, usecols=[2,3], names=['x','y'])
 seqFISH_coords.head()
 
-# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Exploratory Data Analysis
 
 # %% [markdown]
@@ -310,7 +310,7 @@ plt.tight_layout()
 # **Conclusion**  
 # We will simply work on the data given by the workshop organizers as gene expression data are already well processed.
 
-# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Map non spatial scRNAseq data to spatial seqFISH data
 
 # %% [markdown]
@@ -670,7 +670,7 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # With LinearSVC as in Zhu's paper we can reach an accuracy of 0.9 too, but a balanced accuracy of 0.78 only.  
 # We will stick to our kernel SVC as the balanced accuracy is a bit higher.
 
-# %% [markdown]
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Top-down elimination of variables
 
 # %%
@@ -898,7 +898,7 @@ plt.title('Accuracy of scRNAseq classification with Linear SVC during variables 
 # These plots confirm that Zhu *et al.* probably used the simple accuracy instead of the balanced accuracy.  
 # The kernel SVC require fewer genes (\~19-29) than the linear SVC (\~35-39) to maintain a relatively high score.
 
-# %% [markdown]
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Infer cell types from restricted gene list
 
 # %%
@@ -1199,8 +1199,8 @@ for i in range(nb_cells):
     neigh = np.hstack( (left_neigh, right_neigh) ).flatten()
     
     if neigh.size != 0:
-        genes_aggreg[i,:nb_genes] = Xtest[neigh,:].mean(axis=0)
-        genes_aggreg[i,-nb_genes:] = Xtest[neigh,:].std(axis=0)
+        genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
+        genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
     else:
         genes_aggreg[i,:] = None
 
@@ -1229,7 +1229,9 @@ embedding.shape
 # %%
 plt.figure(figsize=[10,10])
 plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
-plt.title("Aggregated neighbors' genes data", fontsize=18);
+title = "Aggregated neighbors' genes data"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # It looks like we can define some clusters :)
@@ -1334,7 +1336,10 @@ plt.scatter(embedding[clustered, 0],
             c=labels[clustered],
             s=5,
             cmap='Spectral');
-plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
+
+title = "HDBSCAN clustering on aggregated neighbors' genes data"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
 class_id, class_count = np.unique(labels[clustered], return_counts=True)
@@ -1375,7 +1380,7 @@ plt.title("OPTICS clustering on aggregated neighbors' genes data", fontsize=18);
 # HDBSCAN provides a much better clustering regarding the data projection.
 
 # %% [markdown]
-# ### Visualisation of spatial seqFISH data and detected areas 
+# #### Visualisation of spatial seqFISH data and detected areas 
 
 # %%
 fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
@@ -1395,6 +1400,9 @@ ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
 
 # %% [markdown]
 # We want to aggregate gene expression data up the 2nd, 3rd ot k-th neighbors.
+
+# %% [markdown]
+# #### Functions definition
 
 # %%
 def neighbors(pairs, n):
@@ -1437,8 +1445,8 @@ def neighbors_k_order(pairs, n, order):
         
     Returns
     -------
-    k_neigh : array_like
-        The indices of neighboring nodes and their order.
+    all_neigh : list
+        The list of lists of 1D array neighbor and the corresponding order
     
     
     Examples
@@ -1490,6 +1498,46 @@ def neighbors_k_order(pairs, n, order):
         unique_neigh = np.concatenate([unique_neigh, k_unique_neigh], axis=0)
         
     return all_neigh
+
+def flatten_neighbors(all_neigh):
+    """
+    Convert the list of neighbors 1D arrays with their order into
+    a single 1D array of neighbors.
+
+    Parameters
+    ----------
+    all_neigh : list
+        The list of lists of 1D array neighbor and the corresponding order.
+
+    Returns
+    -------
+    flat_neigh : array_like
+        The indices of neighboring nodes.
+        
+    Examples
+    --------
+    >>> all_neigh = [[np.array([0]), 0],
+                     [np.array([10, 20, 30]), 1],
+                     [np.array([110, 120, 130, 210, 220, 230, 310, 320, 330]), 2]]
+    >>> flatten_neighbors(all_neigh)
+    array([  0,  10,  20,  30, 110, 120, 130, 210, 220, 230, 310, 320, 330])
+        
+    Notes
+    -----
+    For future features it should return a 2D array of
+    nodes and their respective order.
+    """
+    
+    list_neigh = []
+#     list_order = []
+    for neigh, order in all_neigh:
+        list_neigh.append(neigh)
+#         list_order.append(np.ones(neigh.size) * order)
+    flat_neigh = np.concatenate(list_neigh, axis=0)
+#     flat_order = np.concatenate(list_order, axis=0)
+#     flat_neigh = np.vstack([flat_neigh, flat_order]).T
+
+    return flat_neigh
 
 
 # %% [markdown]
@@ -1544,22 +1592,76 @@ for i, (x, y) in enumerate(pos.values()):
     ax.scatter(x, y, c=order_color[i], marker='o', s=40, zorder=10)
 
 # %%
+neighbors_k_order(pairs, 0, 2)
+
+# %%
+flatten_neighbors(all_neigh)
+
+# %% [markdown]
+# Ok it works.
+
+# %% [markdown]
+# ### Genes k neighbors aggregation
+
+# %% [markdown]
+#
+
+# %%
 nb_cells = Xpred.shape[0]
 nb_genes = Xpred.shape[1]
 genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
-pair_points = vor.ridge_points[selection,:]
+pairs = vor.ridge_points[selection,:]
 
-for i in range(nb_cells):
-    # array of neighbors of a given node
-    left_neigh = pair_points[pair_points[:,1] == i, 0]
-    right_neigh = pair_points[pair_points[:,0] == i, 1]
-    neigh = np.hstack( (left_neigh, right_neigh) ).flatten()
-    
+order = 2
+for n in range(nb_cells):
+    all_neigh = neighbors_k_order(pairs, n=n, order=order)
+    neigh = flatten_neighbors(all_neigh)
     if neigh.size != 0:
-        genes_aggreg[i,:nb_genes] = Xtest[neigh,:].mean(axis=0)
-        genes_aggreg[i,-nb_genes:] = Xtest[neigh,:].std(axis=0)
+        genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
+        genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
     else:
         genes_aggreg[i,:] = None
+
+# %% [markdown]
+# #### HDBSCAN on reduced space
+
+# %% [markdown]
+# UMAP projection with parameters adapted for clustering
+
+# %%
+embedding = umap.UMAP(n_neighbors=30,
+                      min_dist=0.0,
+                      n_components=2,
+                      random_state=42,
+                      ).fit_transform(neigh_valid)
+
+plt.figure(figsize=[10,10])
+plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
+plt.title("Overview of aggregated neighbors' genes data", fontsize=18);
+
+# %%
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+clusterer.fit(embedding)
+print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+
+# %% [markdown]
+# we choose `min_samples=1` to avoid having points considered as noise
+
+# %%
+labels = clusterer.labels_
+clustered = (labels >= 0)
+plt.figure(figsize=[10,10])
+plt.scatter(embedding[~clustered, 0],
+            embedding[~clustered, 1],
+            c=(0.5, 0.5, 0.5),
+            s=5,
+            alpha=0.9)
+plt.scatter(embedding[clustered, 0],
+            embedding[clustered, 1],
+            c=labels[clustered],
+            s=5,
+            cmap='Spectral');
+plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
 
 # %% [markdown]
 # ## Conclusion
