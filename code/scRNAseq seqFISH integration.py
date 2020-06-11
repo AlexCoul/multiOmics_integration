@@ -1397,7 +1397,7 @@ ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
 # We want to aggregate gene expression data up the 2nd, 3rd ot k-th neighbors.
 
 # %%
-def neighbors(pairs, node):
+def neighbors(pairs, n):
     """
     Return the list of neighbors of a node in a network defined 
     by edges between pairs of nodes. 
@@ -1406,8 +1406,8 @@ def neighbors(pairs, node):
     ----------
     pairs : array_like
         Pairs of nodes' id that define the network's edges.
-    node : int
-        The node from which we look for the neighbors.
+    n : int
+        The node for which we look for the neighbors.
         
     Returns
     -------
@@ -1415,7 +1415,133 @@ def neighbors(pairs, node):
         The indices of neighboring nodes.
     """
     
+    left_neigh = pairs[pairs[:,1] == n, 0]
+    right_neigh = pairs[pairs[:,0] == n, 1]
+    neigh = np.hstack( (left_neigh, right_neigh) ).flatten()
     
+    return neigh
+
+def neighbors_k_order(pairs, n, order):
+    """
+    Return the list of up the kth neighbors of a node 
+    in a network defined by edges between pairs of nodes
+    
+    Parameters
+    ----------
+    pairs : array_like
+        Pairs of nodes' id that define the network's edges.
+    n : int
+        The node for which we look for the neighbors.
+    order : int
+        Max order of neighbors.
+        
+    Returns
+    -------
+    k_neigh : array_like
+        The indices of neighboring nodes and their order.
+    
+    
+    Examples
+    --------
+    >>> pairs = np.array([[0, 10],
+                        [0, 20],
+                        [0, 30],
+                        [10, 110],
+                        [10, 210],
+                        [10, 310],
+                        [20, 120],
+                        [20, 220],
+                        [20, 320],
+                        [30, 130],
+                        [30, 230],
+                        [30, 330],
+                        [10, 20],
+                        [20, 30],
+                        [30, 10],
+                        [310, 120],
+                        [320, 130],
+                        [330, 110]])
+    >>> neighbors_k_order(pairs, 0, 2)
+    [[array([0]), 0],
+     [array([10, 20, 30]), 1],
+     [array([110, 120, 130, 210, 220, 230, 310, 320, 330]), 2]]
+    """
+    
+    # all_neigh stores all the unique neighbors and their oder
+    all_neigh = [[np.array([n]), 0]]
+    unique_neigh = np.array([n])
+    
+    for k in range(order):
+        # detected neighbor nodes at the previous order
+        last_neigh = all_neigh[k][0]
+        k_neigh = []
+        for node in last_neigh:
+            # aggregate arrays of neighbors for each previous order neighbor
+            neigh = np.unique(neighbors(pairs, node))
+            k_neigh.append(neigh)
+        # aggregate all unique kth order neighbors
+        k_unique_neigh = np.unique(np.concatenate(k_neigh, axis=0))
+        # select the kth order neighbors that have never been detected in previous orders
+        keep_neigh = np.in1d(k_unique_neigh, unique_neigh, invert=True)
+        k_unique_neigh = k_unique_neigh[keep_neigh]
+        # register the kth order unique neighbors along with their order
+        all_neigh.append([k_unique_neigh, k+1])
+        # update array of unique detected neighbors
+        unique_neigh = np.concatenate([unique_neigh, k_unique_neigh], axis=0)
+        
+    return all_neigh
+
+
+# %% [markdown]
+# #### Visualization of exemplary network
+
+# %%
+pairs = np.array([[0, 10],
+                  [0, 20],
+                  [0, 30],
+                  [10, 110],
+                  [10, 210],
+                  [10, 310],
+                  [20, 120],
+                  [20, 220],
+                  [20, 320],
+                  [30, 130],
+                  [30, 230],
+                  [30, 330],
+                  [10, 20],
+                  [20, 30],
+                  [30, 10],
+                  [310, 120],
+                  [320, 130],
+                  [330, 110]])
+
+from collections import OrderedDict 
+pos = OrderedDict([
+                   (0, [0, 0]),
+                   (10, [-1, 0]),
+                   (20, [0, 1]),
+                   (30, [1, 0]),
+                   (110, [-1, -0.5]),
+                   (210, [-1.5, 0]),
+                   (310, [-1, 0.5]),
+                   (120, [-0.5, 1]),
+                   (220, [0, 1.5]),
+                   (320, [0.5, 1]),
+                   (130, [1, 0.5]),
+                   (230, [1.5, 0]),
+                   (330, [1, -0.5])
+                  ])
+
+order = [0] + [1] * 3 + [2] * 9
+order_color = [palette_grey[x] for x in order]
+
+fig, ax = plt.subplots(figsize=[10, 10])
+for a, b in pairs:
+    xa, ya = pos[a]
+    xb, yb = pos[b]
+    ax.plot([xa, xb], [ya, yb], c='k',zorder=0, alpha=0.5)
+for i, (x, y) in enumerate(pos.values()):
+    ax.scatter(x, y, c=order_color[i], marker='o', s=40, zorder=10)
 
 # %%
 nb_cells = Xpred.shape[0]
