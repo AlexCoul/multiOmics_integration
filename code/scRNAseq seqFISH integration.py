@@ -28,7 +28,7 @@
 # - find the minimum number of genes required for this mapping
 # - investigate on whether there are some signatures in non spatial scRNAseq data about the spatial organisation of cells
 
-# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Imports
 
 # %%
@@ -40,6 +40,18 @@ import os
 from path import Path
 from time import time
 import copy
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC, LinearSVC
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import cross_validate, GridSearchCV, RandomizedSearchCV
+from scipy.stats import loguniform
+
+import umap
+# if not installed run: conda install -c conda-forge umap-learn
+import hdbscan
+from sklearn.cluster import OPTICS, cluster_optics_dbscan
 
 # %%
 # %qtconsole
@@ -98,6 +110,23 @@ counts
 # Tha classes are higly imbalanced.
 
 # %% [markdown]
+# #### label re-encoding
+
+# %%
+# we transform Tasic's phenotypes from strings to integers
+# for their visualization on projections
+
+from sklearn import preprocessing
+le = preprocessing.LabelEncoder()
+phenotypes = list(scRNAseq_labels.iloc[:,0].unique())
+le.fit(phenotypes)
+
+y_true = le.transform(scRNAseq_labels.iloc[:,0])
+
+# colors of data points according to their phenotypes
+colors = [sns.color_palette()[x] for x in y_true]
+
+# %% [markdown]
 # ### seqFISH coordinates
 
 # %% [markdown]
@@ -107,7 +136,7 @@ counts
 seqFISH_coords = pd.read_csv(seqFISH_coords_path, sep=' ', header=None, usecols=[2,3], names=['x','y'])
 seqFISH_coords.head()
 
-# %% [markdown]
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Exploratory Data Analysis
 
 # %% [markdown]
@@ -146,8 +175,6 @@ plt.suptitle('Differences in summary statistics')
 # If we use a standard scaler, does it make them more comparable?
 
 # %%
-from sklearn.preprocessing import StandardScaler
-
 scRNAseq_scaled = StandardScaler().fit_transform(scRNAseq)
 seqFISH_scaled = StandardScaler().fit_transform(seqFISH)
 # convert it to DataFrame to use convenient methods
@@ -247,27 +274,6 @@ plt.tight_layout()
 # %% [markdown]
 # ### Check data transformations with UMAP projections
 
-# %%
-import umap
-# if not installed run: conda install -c conda-forge umap-learn
-
-# %% [markdown]
-# #### label re-encoding
-
-# %%
-# we transform Tasic's phenotypes from strings to integers
-# for their visualization on projections
-
-from sklearn import preprocessing
-le = preprocessing.LabelEncoder()
-phenotypes = list(scRNAseq_labels.iloc[:,0].unique())
-le.fit(phenotypes)
-
-y_true = le.transform(scRNAseq_labels.iloc[:,0])
-
-# colors of data points according to their phenotypes
-colors = [sns.color_palette()[x] for x in y_true]
-
 # %% [markdown]
 # #### scRNAseq transformation and projection
 
@@ -306,22 +312,21 @@ plt.tight_layout()
 # **Conclusion**  
 # We will simply work on the data given by the workshop organizers as gene expression data are already well processed.
 
-# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Map non spatial scRNAseq data to spatial seqFISH data
 
 # %% [markdown]
 # We train and test the models with the scRNAseq data, assuming Tasic's phenotypes definition is the gold standard.
 
 # %%
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-X = scaler.fit_transform(scRNAseq)
-
-# %%
 from multiprocessing import cpu_count
 
 nb_cores = cpu_count()
 print(f"There are {nb_cores} available cores")
+
+# %%
+scaler = StandardScaler()
+X = scaler.fit_transform(scRNAseq)
 
 # %% [markdown]
 # ### Test kNN
@@ -330,10 +335,6 @@ print(f"There are {nb_cores} available cores")
 # To test the minimum number of genes required for cell phenotype classification, we try quickly the k-nearest neighbors model.
 
 # %%
-from sklearn.metrics import accuracy_score
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import cross_validate
-
 clf = KNeighborsClassifier(n_neighbors=10)
 cv = cross_validate(clf, X, y_true,
                     cv=10,
@@ -354,8 +355,6 @@ print(f"Balanced accuracy: {cv['test_balanced_accuracy'].mean():0.2f} (+/- {cv['
 # I just change max_iter to its default -1 (infinite)
 
 # %%
-from sklearn.svm import SVC
-
 clf = SVC(class_weight = 'balanced', tol = 1e-4, C = 1e-6, max_iter = -1)
 cv = cross_validate(clf, X, y_true,
                     cv=10,
@@ -368,8 +367,6 @@ print(f"Balanced accuracy: {cv['test_balanced_accuracy'].mean():0.2f} (+/- {cv['
 # With Zhu's parameters the model is very bad, but they actually used `LinearSVC`!
 
 # %%
-from sklearn.svm import LinearSVC
-
 clf = LinearSVC(class_weight="balanced", dual=False, C = 1e-6, max_iter=10000, tol=1e-4)
 cv = cross_validate(clf, X, y_true,
                     cv=10,
@@ -496,10 +493,6 @@ def cv_to_df(cv, scores, order_by=None, ascending=False):
 # %%
 # # LONG runtime
 
-# from scipy.stats import loguniform
-# from sklearn.svm import SVC
-# from sklearn.model_selection import RandomizedSearchCV
-
 # clf = SVC(class_weight = 'balanced')
 
 # # specify parameters and distributions to sample from
@@ -615,8 +608,6 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # %%
 # # LONG runtime
 
-# from sklearn.model_selection import GridSearchCV
-
 # clf = LinearSVC(class_weight="balanced", dual=False, max_iter=10000)
 
 # # specify parameters and distributions to sample from
@@ -681,7 +672,7 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # With LinearSVC as in Zhu's paper we can reach an accuracy of 0.9 too, but a balanced accuracy of 0.78 only.  
 # We will stick to our kernel SVC as the balanced accuracy is a bit higher.
 
-# %% [markdown]
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Top-down elimination of variables
 
 # %%
@@ -909,7 +900,7 @@ plt.title('Accuracy of scRNAseq classification with Linear SVC during variables 
 # These plots confirm that Zhu *et al.* probably used the simple accuracy instead of the balanced accuracy.  
 # The kernel SVC require fewer genes (\~19-29) than the linear SVC (\~35-39) to maintain a relatively high score.
 
-# %% [markdown]
+# %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Infer cell types from restricted gene list
 
 # %%
@@ -962,7 +953,9 @@ elimination_report = np.loadtxt("../data/processed/elimination_report-balanced-a
 
 # Keep the minimum number of genes that lead to good predictions
 gene_names = list(scRNAseq.columns)
-genes_elim_id = elimination_report[:93,0].astype(int)
+# nb_elim = 86 # optimal number of genes to discard
+nb_elim = 93 # eliminate more genes, with still good performance
+genes_elim_id = elimination_report[:nb_elim,0].astype(int)
 genes_elim = successive_elimination(gene_names, genes_elim_id)
 
 
@@ -1084,12 +1077,31 @@ clf.fit(Xtest, y_true)
 y_pred = clf.predict(Xpred)
 
 # %%
-from matplotlib.colors import ListedColormap
-my_cmap = ListedColormap(sns.color_palette().as_hex())
+base_cmap = sns.color_palette('muted').as_hex() # plt.get_cmap("Set1")
 
-plt.figure(figsize=[10,10])
-plt.scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=my_cmap, marker='o', s=5)
-plt.title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+# make a custom colormap with class integers, labels and hex colors like
+# [[0, 'Astrocyte', '#023eff'],
+#  [2, 'GABA-ergic Neuron', '#ff7c00'],
+#  [3, 'Glutamatergic Neuron', '#1ac938']]
+# 
+# color_labels = []
+# for i, i_pred in enumerate(np.unique(y_pred)):
+#     color_labels.append([i_pred, le.inverse_transform([i_pred])[0], base_cmap[i]])
+
+# more custom colormap, switch to previous line if any issue like different class integers
+color_labels = [[0, le.inverse_transform([0])[0], base_cmap[0]],
+                [2, le.inverse_transform([2])[0], base_cmap[1]],
+                [3, le.inverse_transform([3])[0], base_cmap[2]]]
+
+fig, ax = plt.subplots(figsize=[10,10])
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax.scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=10)
+plt.legend()
+
+title = 'Spatial map of prediction of phenotypes for seqFISH data'
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
 pheno_id, counts = np.unique(y_pred, return_counts=True)
@@ -1099,10 +1111,26 @@ pd.DataFrame(data={'phenotype':pheno_names,
              index=pheno_id)
 
 # %% [markdown]
+# There are only 3 cell types predicted, we are missing:
+# - Endothelial Cell
+# - Microglia
+# - Oligodendrocyte.1
+# - Oligodendrocyte.2
+# - Oligodendrocyte.3
+
+# %% [markdown]
 # ## Spatial analysis
 
 # %% [markdown]
+# The main idea is to reconstruct the spatial network of cells, where nodes are cells and edges link neighboring cells.  
+# We will use this network to analyse how neighboring cells (linked nodes) can define a spacially coherent area.
+
+# %% [markdown]
 # ### Network reconstruction
+
+# %% [markdown]
+# We use Voronoi tessellation to define the edges that link neighboring cells.  
+# Voroinoi tessellation defines virtual cell boundaries, and we link cells that share boundaries.
 
 # %%
 from scipy.spatial import Voronoi
@@ -1116,43 +1144,72 @@ voro_cells[:,[2,3]] = seqFISH_coords.loc[vor.ridge_points[:,1], ['x','y']]
 distances = np.sqrt((voro_cells[:,0]-voro_cells[:,2])**2+(voro_cells[:,1]-voro_cells[:,3])**2)
 
 # %%
-EDGE_DIST_THRESH = 300 # distance threshold to discard edges below it
+fig, ax = plt.subplots(figsize=[15, 15])
+for points in voro_cells[:,:]:
+    ax.plot(points[[0,2]],points[[1,3]], c='k',zorder=0, alpha=0.5)
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax.scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+plt.legend()
+
+title = 'Spatial network of seqFISH data without distance threshold'
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
+
+# %% [markdown]
+# There are many edges that connect nodes on the border of the network, it's only due to Voronoi tessellation and limit conditions.  
+# We need to cut edges that link nodes that are more distant than a given threshold.
+
+# %%
+# distance threshold to discard edges above it
+#  mainly artifacts at the borders of the whole dataset
+EDGE_DIST_THRESH = 300 
 selection = distances < EDGE_DIST_THRESH
 
-plt.figure(figsize=[15,15])
+fig, ax = plt.subplots(figsize=[15, 15])
 for points in voro_cells[selection,:]:
-    plt.plot(points[[0,2]],points[[1,3]], 'k-', alpha=0.5)
-plt.scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=10)
-plt.title('Spatial network of seqFISH data', fontsize=18);
+    ax.plot(points[[0,2]],points[[1,3]], c='k',zorder=0, alpha=0.5)
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax.scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+plt.legend()
+
+title = 'Spatial network of seqFISH data'
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
-# I have to fix the colour display of the nodes... :-/
-
-# %% [markdown]
+# Instead of cutting edges, we could give them weight thats decrease with distance. But that's an improvement that requires some time to implement.  
 # The next step is, for each node, look at its neighboors, and aggregate in some way their gene expression data.  
 # In the first place I think about mean and variance in order to capture the (non)homogeneity of cell types in the area.
 
 # %% [markdown]
 # ### Neighbors gene expression aggregation
 
+# %% [markdown]
+# #### Aggregation
+
 # %%
-nb_cells = Xtest.shape[0]
-nb_genes = Xtest.shape[1]
+# array to store aggregated data
+nb_cells = Xpred.shape[0]
+nb_genes = Xpred.shape[1]
 genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
 pair_points = vor.ridge_points[selection,:]
 
 for i in range(nb_cells):
+    # array of neighbors of a given node
     left_neigh = pair_points[pair_points[:,1] == i, 0]
     right_neigh = pair_points[pair_points[:,0] == i, 1]
-    # array of all neighboors of node i
     neigh = np.hstack( (left_neigh, right_neigh) ).flatten()
     
     if neigh.size != 0:
-        genes_aggreg[i,:nb_genes] = Xtest[neigh,:].mean(axis=0)
-        genes_aggreg[i,-nb_genes:] = Xtest[neigh,:].std(axis=0)
+        genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
+        genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
     else:
         genes_aggreg[i,:] = None
 
+# the following lines were needed when I made the error of
+# using Xtest instead of Xpred, the indices didn't match
 error_cells = np.isnan(genes_aggreg[:,0])
 nb_errors = error_cells.sum()
 print(f"There has been {nb_errors}/{nb_cells} cells set to NaN")
@@ -1161,16 +1218,24 @@ print(f"There has been {nb_errors}/{nb_cells} cells set to NaN")
 neigh_valid = genes_aggreg[~error_cells,:]
 
 # %% [markdown]
-# ### Neighbors aggregated genes visualization
+# #### Visualization
+
+# %%
+marker = 'o'
+size_points = 10
+colormap = 'tab10'
 
 # %%
 reducer = umap.UMAP()
 embedding = reducer.fit_transform(neigh_valid)
 embedding.shape
 
+# %%
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c='blue', marker=marker, s=size_points)
-plt.title("Aggregated neighbors' genes data", fontsize=18);
+plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
+title = "Aggregated neighbors' genes data"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # It looks like we can define some clusters :)
@@ -1185,8 +1250,6 @@ plt.title("Aggregated neighbors' genes data", fontsize=18);
 # #### HDBSCAN
 
 # %%
-import hdbscan
-
 clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20)
 clusterer.fit(neigh_valid)
 print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
@@ -1204,8 +1267,6 @@ print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
 # a minkowsky distance with `p=2` is the euclidian distance, so that's fine
 
 # %%
-from sklearn.cluster import OPTICS, cluster_optics_dbscan
-
 clust = OPTICS()
 # Run the fit
 clust.fit(neigh_valid)
@@ -1214,8 +1275,25 @@ clust.fit(neigh_valid)
 clust.labels_.max()
 
 # %%
+class_id, class_count = np.unique(clust.labels_, return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
+
+# %% [markdown]
+# Most of points are classified as `-1`, which mean noise, which is bad!
+
+# %%
+# Define cluster colors to highlight noise
+from bokeh.palettes import Category10
+
+nb_labels = clust.labels_.max()
+palette = Category10[nb_labels]
+palette_grey =  list(Category10[nb_labels])
+palette_grey.append('#C0C0C0')
+clust_colors = [palette_grey[x] for x in clust.labels_]
+
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c=clust.labels_, cmap=colormap, marker=marker, s=size_points)
+plt.scatter(embedding[:, 0], embedding[:, 1], c=clust_colors, marker=marker, s=size_points)
 plt.title("Aggregated neighbors' genes data", fontsize=18);
 
 # %% [markdown]
@@ -1226,6 +1304,9 @@ plt.title("Aggregated neighbors' genes data", fontsize=18);
 # %% [markdown]
 # #### HDBSCAN on reduced space
 
+# %% [markdown]
+# UMAP projection with parameters adapted for clustering
+
 # %%
 embedding = umap.UMAP(n_neighbors=30,
                       min_dist=0.0,
@@ -1234,12 +1315,10 @@ embedding = umap.UMAP(n_neighbors=30,
                       ).fit_transform(neigh_valid)
 
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c='blue', marker=marker, s=size_points)
+plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
 plt.title("Overview of aggregated neighbors' genes data", fontsize=18);
 
 # %%
-import hdbscan
-
 clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
 clusterer.fit(embedding)
 print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
@@ -1261,9 +1340,18 @@ plt.scatter(embedding[clustered, 0],
             c=labels[clustered],
             s=5,
             cmap='Spectral');
-plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
+
+title = "HDBSCAN clustering on aggregated neighbors' genes data"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
+
+# %%
+class_id, class_count = np.unique(labels[clustered], return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
 
 # %% [markdown]
+# This is pretty good :)  
 # Of course one can tweak the parameters to obtain a clustering that fits him better.
 
 # %% [markdown]
@@ -1277,15 +1365,294 @@ clust.fit(embedding)
 clust.labels_.max()
 
 # %%
+class_id, class_count = np.unique(clust.labels_, return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
+
+# %%
+nb_labels = clust.labels_.max()
+palette = Category10[nb_labels]
+palette_grey =  list(Category10[nb_labels])
+palette_grey.append('#C0C0C0')
+clust_colors = [palette_grey[x] for x in clust.labels_]
+
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c=clust.labels_, cmap=colormap, marker=marker, s=size_points)
+plt.scatter(embedding[:, 0], embedding[:, 1], c=clust_colors, marker=marker, s=size_points)
 plt.title("OPTICS clustering on aggregated neighbors' genes data", fontsize=18);
 
 # %% [markdown]
 # HDBSCAN provides a much better clustering regarding the data projection.
 
 # %% [markdown]
-# ### Visualisation of spatial seqFISH data and detected areas 
+# #### Visualisation of spatial seqFISH data and detected areas 
+
+# %%
+fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
+ax[0].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=size_points)
+ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+
+
+# %% [markdown]
+# The detected areas look plausible as points affected to different area types are not randomly dispersed.  
+# Moreover the detected areas span over areas of some phenotypes or form regions smaller than areas of some phenotypes.
+
+# %% [markdown]
+# ### Multiple neighbors
+
+# %% [markdown]
+# We want to aggregate gene expression data up the 2nd, 3rd ot k-th neighbors.
+
+# %% [markdown]
+# #### Functions definition
+
+# %%
+def neighbors(pairs, n):
+    """
+    Return the list of neighbors of a node in a network defined 
+    by edges between pairs of nodes. 
+    
+    Parameters
+    ----------
+    pairs : array_like
+        Pairs of nodes' id that define the network's edges.
+    n : int
+        The node for which we look for the neighbors.
+        
+    Returns
+    -------
+    neigh : array_like
+        The indices of neighboring nodes.
+    """
+    
+    left_neigh = pairs[pairs[:,1] == n, 0]
+    right_neigh = pairs[pairs[:,0] == n, 1]
+    neigh = np.hstack( (left_neigh, right_neigh) ).flatten()
+    
+    return neigh
+
+def neighbors_k_order(pairs, n, order):
+    """
+    Return the list of up the kth neighbors of a node 
+    in a network defined by edges between pairs of nodes
+    
+    Parameters
+    ----------
+    pairs : array_like
+        Pairs of nodes' id that define the network's edges.
+    n : int
+        The node for which we look for the neighbors.
+    order : int
+        Max order of neighbors.
+        
+    Returns
+    -------
+    all_neigh : list
+        The list of lists of 1D array neighbor and the corresponding order
+    
+    
+    Examples
+    --------
+    >>> pairs = np.array([[0, 10],
+                        [0, 20],
+                        [0, 30],
+                        [10, 110],
+                        [10, 210],
+                        [10, 310],
+                        [20, 120],
+                        [20, 220],
+                        [20, 320],
+                        [30, 130],
+                        [30, 230],
+                        [30, 330],
+                        [10, 20],
+                        [20, 30],
+                        [30, 10],
+                        [310, 120],
+                        [320, 130],
+                        [330, 110]])
+    >>> neighbors_k_order(pairs, 0, 2)
+    [[array([0]), 0],
+     [array([10, 20, 30]), 1],
+     [array([110, 120, 130, 210, 220, 230, 310, 320, 330]), 2]]
+    """
+    
+    # all_neigh stores all the unique neighbors and their oder
+    all_neigh = [[np.array([n]), 0]]
+    unique_neigh = np.array([n])
+    
+    for k in range(order):
+        # detected neighbor nodes at the previous order
+        last_neigh = all_neigh[k][0]
+        k_neigh = []
+        for node in last_neigh:
+            # aggregate arrays of neighbors for each previous order neighbor
+            neigh = np.unique(neighbors(pairs, node))
+            k_neigh.append(neigh)
+        # aggregate all unique kth order neighbors
+        k_unique_neigh = np.unique(np.concatenate(k_neigh, axis=0))
+        # select the kth order neighbors that have never been detected in previous orders
+        keep_neigh = np.in1d(k_unique_neigh, unique_neigh, invert=True)
+        k_unique_neigh = k_unique_neigh[keep_neigh]
+        # register the kth order unique neighbors along with their order
+        all_neigh.append([k_unique_neigh, k+1])
+        # update array of unique detected neighbors
+        unique_neigh = np.concatenate([unique_neigh, k_unique_neigh], axis=0)
+        
+    return all_neigh
+
+def flatten_neighbors(all_neigh):
+    """
+    Convert the list of neighbors 1D arrays with their order into
+    a single 1D array of neighbors.
+
+    Parameters
+    ----------
+    all_neigh : list
+        The list of lists of 1D array neighbor and the corresponding order.
+
+    Returns
+    -------
+    flat_neigh : array_like
+        The indices of neighboring nodes.
+        
+    Examples
+    --------
+    >>> all_neigh = [[np.array([0]), 0],
+                     [np.array([10, 20, 30]), 1],
+                     [np.array([110, 120, 130, 210, 220, 230, 310, 320, 330]), 2]]
+    >>> flatten_neighbors(all_neigh)
+    array([  0,  10,  20,  30, 110, 120, 130, 210, 220, 230, 310, 320, 330])
+        
+    Notes
+    -----
+    For future features it should return a 2D array of
+    nodes and their respective order.
+    """
+    
+    list_neigh = []
+#     list_order = []
+    for neigh, order in all_neigh:
+        list_neigh.append(neigh)
+#         list_order.append(np.ones(neigh.size) * order)
+    flat_neigh = np.concatenate(list_neigh, axis=0)
+#     flat_order = np.concatenate(list_order, axis=0)
+#     flat_neigh = np.vstack([flat_neigh, flat_order]).T
+
+    return flat_neigh
+
+
+# %% [markdown]
+# #### Visualization of exemplary network
+
+# %%
+pairs = np.array([[0, 10],
+                  [0, 20],
+                  [0, 30],
+                  [10, 110],
+                  [10, 210],
+                  [10, 310],
+                  [20, 120],
+                  [20, 220],
+                  [20, 320],
+                  [30, 130],
+                  [30, 230],
+                  [30, 330],
+                  [10, 20],
+                  [20, 30],
+                  [30, 10],
+                  [310, 120],
+                  [320, 130],
+                  [330, 110]])
+
+from collections import OrderedDict 
+pos = OrderedDict([
+                   (0, [0, 0]),
+                   (10, [-1, 0]),
+                   (20, [0, 1]),
+                   (30, [1, 0]),
+                   (110, [-1, -0.5]),
+                   (210, [-1.5, 0]),
+                   (310, [-1, 0.5]),
+                   (120, [-0.5, 1]),
+                   (220, [0, 1.5]),
+                   (320, [0.5, 1]),
+                   (130, [1, 0.5]),
+                   (230, [1.5, 0]),
+                   (330, [1, -0.5])
+                  ])
+
+order = [0] + [1] * 3 + [2] * 9
+order_color = [palette_grey[x] for x in order]
+
+fig, ax = plt.subplots(figsize=[10, 10])
+for a, b in pairs:
+    xa, ya = pos[a]
+    xb, yb = pos[b]
+    ax.plot([xa, xb], [ya, yb], c='k',zorder=0, alpha=0.5)
+for i, (x, y) in enumerate(pos.values()):
+    ax.scatter(x, y, c=order_color[i], marker='o', s=40, zorder=10)
+
+# %%
+neighbors_k_order(pairs, 0, 2)
+
+# %%
+flatten_neighbors(all_neigh)
+
+# %% [markdown]
+# Ok it works.
+
+# %% [markdown]
+# ### Genes k neighbors aggregation
+
+# %% [markdown]
+# #### 2nd order
+
+# %%
+nb_cells = Xpred.shape[0]
+nb_genes = Xpred.shape[1]
+genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
+pairs = vor.ridge_points[selection,:]
+
+order = 2
+for i in range(nb_cells):
+    all_neigh = neighbors_k_order(pairs, n=i, order=order)
+    neigh = flatten_neighbors(all_neigh)
+    if neigh.size != 0:
+        genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
+        genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
+    else:
+        genes_aggreg[i,:] = None
+
+# %%
+embedding = umap.UMAP(n_neighbors=30,
+                      min_dist=0.0,
+                      n_components=2,
+                      random_state=42,
+                      ).fit_transform(genes_aggreg)
+
+# %%
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+clusterer.fit(embedding)
+print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+
+# %%
+labels = clusterer.labels_
+clustered = (labels >= 0)
+plt.figure(figsize=[10,10])
+plt.scatter(embedding[~clustered, 0],
+            embedding[~clustered, 1],
+            c=(0.5, 0.5, 0.5),
+            s=5,
+            alpha=0.9)
+plt.scatter(embedding[clustered, 0],
+            embedding[clustered, 1],
+            c=labels[clustered],
+            s=5,
+            cmap='Spectral');
+plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
 
 # %%
 fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
@@ -1296,8 +1663,106 @@ ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cm
 ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
 
 # %% [markdown]
-# The detected areas look plausible as points affected to different area types are not randomly dispersed.  
-# Moreover the detected areas span over areas of some phenotypes or form regions smaller than areas of some phenotypes.
+# #### 3rd order
+
+# %%
+nb_cells = Xpred.shape[0]
+nb_genes = Xpred.shape[1]
+genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
+pairs = vor.ridge_points[selection,:]
+
+order = 3
+for i in range(nb_cells):
+    all_neigh = neighbors_k_order(pairs, n=i, order=order)
+    neigh = flatten_neighbors(all_neigh)
+    if neigh.size != 0:
+        genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
+        genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
+    else:
+        genes_aggreg[i,:] = None
+
+# %%
+embedding = umap.UMAP(n_neighbors=30,
+                      min_dist=0.0,
+                      n_components=2,
+                      random_state=42,
+                      ).fit_transform(genes_aggreg)
+
+# %%
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+clusterer.fit(embedding)
+print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+
+# %%
+labels = clusterer.labels_
+clustered = (labels >= 0)
+plt.figure(figsize=[10,10])
+plt.scatter(embedding[~clustered, 0],
+            embedding[~clustered, 1],
+            c=(0.5, 0.5, 0.5),
+            s=5,
+            alpha=0.9)
+plt.scatter(embedding[clustered, 0],
+            embedding[clustered, 1],
+            c=labels[clustered],
+            s=5,
+            cmap='Spectral');
+plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
+
+# %%
+fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
+ax[0].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=size_points)
+ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+
+# %% [markdown]
+# #### Higher orders
+
+# %%
+orders = [4, 5, 6]
+
+fig, ax = plt.subplots(nrows=len(orders), ncols=2, figsize=plt.figaspect(1.3)*4)
+for row, order in enumerate(orders):
+    genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
+    pairs = vor.ridge_points[selection,:]
+
+    for i in range(nb_cells):
+        all_neigh = neighbors_k_order(pairs, n=i, order=order)
+        neigh = flatten_neighbors(all_neigh)
+        if neigh.size != 0:
+            genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
+            genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
+        else:
+            genes_aggreg[i,:] = None
+
+    embedding = umap.UMAP(n_neighbors=30,
+                          min_dist=0.0,
+                          n_components=2,
+                          random_state=42,
+                          ).fit_transform(genes_aggreg)
+
+    clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+    clusterer.fit(embedding)
+    print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+
+    labels = clusterer.labels_
+    clustered = (labels >= 0)
+    ax[row,0].scatter(embedding[~clustered, 0],
+                    embedding[~clustered, 1],
+                    c=(0.5, 0.5, 0.5),
+                    s=5,
+                    alpha=0.9)
+    ax[row,0].scatter(embedding[clustered, 0],
+                    embedding[clustered, 1],
+                    c=labels[clustered],
+                    s=5,
+                    cmap='Spectral');
+    ax[row,0].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=15);
+    
+    ax[row,1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
+    ax[row,1].set_title('Spatial map of detected areas for seqFISH data', fontsize=15);
 
 # %% [markdown]
 # ## Conclusion
@@ -1309,5 +1774,3 @@ ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
 # It would be interesting to check that in a further analysis.  
 #
 # An interesting lead could be, for each cell, retrieve the mean values of its corresponding phenotype (the 'signature' of the phenotype), and then run again an aggregated neighbors' gene expression analysis. That could emphasise the genes that are under or over expressed due to the localisation of the cells and eliminate the strong contributions of genes that are specific of cell type.
-
-# %%
