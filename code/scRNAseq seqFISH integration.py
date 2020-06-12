@@ -301,6 +301,8 @@ for i in range(nb_transfo):
     axes[i].set_title(title, fontsize=15)
     axes[i].set_aspect('equal', 'datalim')
 plt.tight_layout()
+title = 'Check data transformations with UMAP projections'
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # On the reduced space of the original data (left figure), the clusterization doesn't seem optimal, some groups are spread among different 'clouds' of points and some points are in the middle of another group.  
@@ -762,7 +764,9 @@ plt.figure(figsize=(14,8))
 plt.plot(elimination_report[::-1,1]);
 plt.xlabel('nb remaining variables + 1')
 plt.ylabel('score')
-plt.title('Balanced accuracy of scRNAseq classification during variables (genes) elimination');
+title = 'Balanced accuracy of scRNAseq classification during variables (genes) elimination'
+plt.title(title);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # We can eliminate ~3/4 of genes without a signicative change in the classification performance.  
@@ -780,7 +784,9 @@ plt.figure(figsize=(14,8))
 plt.plot(elimination_report[::-1,1]);
 plt.xlabel('nb remaining variables + 1')
 plt.ylabel('score')
-plt.title('Accuracy of scRNAseq classification during variables (genes) elimination');
+title = 'Accuracy of scRNAseq classification during variables (genes) elimination'
+plt.title(title);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # So there is a clear difference, and it is easy to overestimate the perfomance of the classifier with the wrong metrics
@@ -880,7 +886,9 @@ plt.figure(figsize=(14,8))
 plt.plot(elimination_report[::-1,1]);
 plt.xlabel('nb remaining variables + 1')
 plt.ylabel('score')
-plt.title('Balanced accuracy of scRNAseq classification with Linear SVC during variables (genes) elimination');
+title = 'Balanced accuracy of scRNAseq classification with Linear SVC during variables (genes) elimination'
+plt.title(title);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # #### elimination with accuracy
@@ -893,7 +901,9 @@ plt.figure(figsize=(14,8))
 plt.plot(elimination_report[::-1,1]);
 plt.xlabel('nb remaining variables + 1')
 plt.ylabel('score')
-plt.title('Accuracy of scRNAseq classification with Linear SVC during variables (genes) elimination');
+title = 'Accuracy of scRNAseq classification with Linear SVC during variables (genes) elimination'
+plt.title(title);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 
 # %% [markdown]
@@ -1294,7 +1304,9 @@ clust_colors = [palette_grey[x] for x in clust.labels_]
 
 plt.figure(figsize=[10,10])
 plt.scatter(embedding[:, 0], embedding[:, 1], c=clust_colors, marker=marker, s=size_points)
-plt.title("Aggregated neighbors' genes data", fontsize=18);
+title = "Aggregated neighbors' genes data - OPTICS"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # That is not much better!  
@@ -1316,7 +1328,9 @@ embedding = umap.UMAP(n_neighbors=30,
 
 plt.figure(figsize=[10,10])
 plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
-plt.title("Overview of aggregated neighbors' genes data", fontsize=18);
+title = "Aggregated neighbors' genes data"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
 clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
@@ -1378,7 +1392,9 @@ clust_colors = [palette_grey[x] for x in clust.labels_]
 
 plt.figure(figsize=[10,10])
 plt.scatter(embedding[:, 0], embedding[:, 1], c=clust_colors, marker=marker, s=size_points)
-plt.title("OPTICS clustering on aggregated neighbors' genes data", fontsize=18);
+title = "OPTICS clustering on aggregated neighbors' genes data"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # HDBSCAN provides a much better clustering regarding the data projection.
@@ -1393,6 +1409,10 @@ ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', font
 
 ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
 ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+
+title = "spatial seqFISH data and detected areas"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 
 # %% [markdown]
@@ -1594,9 +1614,14 @@ for a, b in pairs:
     ax.plot([xa, xb], [ya, yb], c='k',zorder=0, alpha=0.5)
 for i, (x, y) in enumerate(pos.values()):
     ax.scatter(x, y, c=order_color[i], marker='o', s=40, zorder=10)
+    
+title = "exemplary network with neighbors orders"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
-neighbors_k_order(pairs, 0, 2)
+all_neigh = neighbors_k_order(pairs, 0, 2)
+all_neigh
 
 # %%
 flatten_neighbors(all_neigh)
@@ -1652,7 +1677,9 @@ plt.scatter(embedding[clustered, 0],
             c=labels[clustered],
             s=5,
             cmap='Spectral');
-plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
+title = "HDBSCAN clustering on aggregated neighbors' genes data - 2nd order"
+plt.title(title, fontsize=15);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
 fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
@@ -1661,6 +1688,9 @@ ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', font
 
 ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
 ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+
+title = "spatial seqFISH data and detected areas - 2nd order"
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # #### 3rd order
@@ -1707,7 +1737,9 @@ plt.scatter(embedding[clustered, 0],
             c=labels[clustered],
             s=5,
             cmap='Spectral');
-plt.title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=18);
+title = "HDBSCAN clustering on aggregated neighbors' genes data - 3rnd order"
+plt.title(title, fontsize=18);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
 fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
@@ -1716,6 +1748,9 @@ ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', font
 
 ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
 ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+
+title = "spatial seqFISH data and detected areas - 3rd order"
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # #### Higher orders
@@ -1763,6 +1798,9 @@ for row, order in enumerate(orders):
     
     ax[row,1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
     ax[row,1].set_title('Spatial map of detected areas for seqFISH data', fontsize=15);
+
+title = "spatial seqFISH data and detected areas - higher orders"
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # ## Conclusion
