@@ -1683,6 +1683,51 @@ def flatten_neighbors(all_neigh):
 
     return flat_neigh
 
+def aggregate_k_neighbors(X, pairs, order=1, var_names=None):
+    """
+    Compute the statistics on aggregated variables across
+    the k order neighbors of each node in a network.
+
+    Parameters
+    ----------
+    X : array_like
+        The data on which to compute statistics (mean, std, ...).
+    pairs : array_like
+        Pairs of nodes' id that define the network's edges.
+    order : int
+        Max order of neighbors.
+    var_names : list
+        Names of variables of X.
+
+    Returns
+    -------
+    aggregg : dataframe
+        Statistics of X.
+        
+    Examples
+    --------
+    >>> pairs = vor.ridge_points[selection,:]
+    >>> genes_aggreg = aggregate_k_neighbors(X=Xpred, pairs=pairs, order=2)
+    """
+    
+    nb_obs = X.shape[0]
+    nb_var = X.shape[1]
+    aggreg = np.zeros((nb_obs, nb_var*2)) # *2 because mean and variance are stored
+
+    for i in range(nb_obs):
+        all_neigh = neighbors_k_order(pairs, n=i, order=order)
+        neigh = flatten_neighbors(all_neigh)
+        aggreg[i,:nb_var] = X[neigh,:].mean(axis=0)
+        aggreg[i,-nb_var:] = X[neigh,:].std(axis=0)
+    
+    if var_names is None:
+        var_names = [str(i) for i in range(nb_var)]
+    columns = [var + ' mean' for var in var_names] +\
+              [var + ' std' for var in var_names]
+    aggreg = pd.DataFrame(data=aggreg, columns=columns)
+    
+    return aggreg
+
 
 # %% [markdown]
 # #### Visualization of exemplary network
@@ -1756,22 +1801,9 @@ flatten_neighbors(all_neigh)
 # #### 2nd order
 
 # %%
-nb_cells = Xpred.shape[0]
-nb_genes = Xpred.shape[1]
-genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
 pairs = vor.ridge_points[selection,:]
+genes_aggreg = aggregate_k_neighbors(X=Xpred, pairs=pairs, order=2)
 
-order = 2
-for i in range(nb_cells):
-    all_neigh = neighbors_k_order(pairs, n=i, order=order)
-    neigh = flatten_neighbors(all_neigh)
-    if neigh.size != 0:
-        genes_aggreg[i,:nb_genes] = Xpred[neigh,:].mean(axis=0)
-        genes_aggreg[i,-nb_genes:] = Xpred[neigh,:].std(axis=0)
-    else:
-        genes_aggreg[i,:] = None
-
-# %%
 embedding = umap.UMAP(n_neighbors=30,
                       min_dist=0.0,
                       n_components=2,
