@@ -1629,14 +1629,17 @@ def neighbors_k_order(pairs, n, order):
             neigh = np.unique(neighbors(pairs, node))
             k_neigh.append(neigh)
         # aggregate all unique kth order neighbors
-        k_unique_neigh = np.unique(np.concatenate(k_neigh, axis=0))
-        # select the kth order neighbors that have never been detected in previous orders
-        keep_neigh = np.in1d(k_unique_neigh, unique_neigh, invert=True)
-        k_unique_neigh = k_unique_neigh[keep_neigh]
-        # register the kth order unique neighbors along with their order
-        all_neigh.append([k_unique_neigh, k+1])
-        # update array of unique detected neighbors
-        unique_neigh = np.concatenate([unique_neigh, k_unique_neigh], axis=0)
+        if len(k_neigh) > 0:
+            k_unique_neigh = np.unique(np.concatenate(k_neigh, axis=0))
+            # select the kth order neighbors that have never been detected in previous orders
+            keep_neigh = np.in1d(k_unique_neigh, unique_neigh, invert=True)
+            k_unique_neigh = k_unique_neigh[keep_neigh]
+            # register the kth order unique neighbors along with their order
+            all_neigh.append([k_unique_neigh, k+1])
+            # update array of unique detected neighbors
+            unique_neigh = np.concatenate([unique_neigh, k_unique_neigh], axis=0)
+        else:
+            break
         
     return all_neigh
 
@@ -1737,7 +1740,7 @@ plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
-all_neigh = neighbors_k_order(pairs, 0, 2)
+all_neigh = neighbors_k_order(pairs, 0, 6)
 all_neigh
 
 # %%
@@ -1941,6 +1944,8 @@ for row, order in enumerate(orders):
 
 # %% [markdown]
 # This is for demonstration only here, because what would be the point in aggregating gene expression data up the the 6th neighbor in such a small sample?
+
+# %%
 
 # %% [markdown]
 # ## Conclusion
