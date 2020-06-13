@@ -61,7 +61,7 @@ data_dir = Path("../data/raw/tasic_scRNAseq/")
 scRNAseq_path = data_dir / "tasic_training_b2.txt"
 seqFISH_path = data_dir / "seqfish_cortex_b2_testing.txt"
 scRNAseq_labels_path = data_dir / "tasic_labels.tsv"
-seqfish_labels_path = data_dir / "seqfish_labels.tsv"
+seqFISH_labels_path = data_dir / "seqfish_labels.tsv"
 seqFISH_coords_path = data_dir / "fcortex.coordinates.txt"
 
 # %% [markdown]
@@ -125,6 +125,22 @@ y_true = le.transform(scRNAseq_labels.iloc[:,0])
 
 # colors of data points according to their phenotypes
 colors = [sns.color_palette()[x] for x in y_true]
+
+# %% [markdown]
+# ### seqFISH labels
+
+# %% [markdown]
+# tsv file of cell type labels for seqFISH
+
+# %%
+seqFISH_labels = pd.read_csv(seqFISH_labels_path, sep='\t', header=None)
+seqFISH_labels.head()
+
+# %%
+seqFISH_counts = seqFISH_labels.groupby(2)[2].value_counts()
+seqFISH_counts.index = seqFISH_counts.index.droplevel()
+seqFISH_counts.index.name = 'phenotype'
+seqFISH_counts
 
 # %% [markdown]
 # ### seqFISH coordinates
