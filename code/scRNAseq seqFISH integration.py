@@ -951,43 +951,36 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # ## Infer cell types from restricted gene list
 
 # %%
-def successive_elimination(list_elems, elems_id, remaining=False):
+def successive_elimination(list_elems, elems_id):
     """
-    Compute the list of elements that remain or that are eliminated 
-    after successive deletions at indicated indices.
+    Compute the order of discarded elements during 
+    successive deletions at indicated indices.
     
     Parameters
     ----------
     list_elems : list
-        A list of elements that can be eliminated
+        A list of elements that are eliminated
     elems_id: list
         A list of indices where elements are successively deleted
-    remaining: bool, default False
-        If True the function returns a list of remaining elements
     
     Returns
     -------
     successive : list
-        A list of deleted or remaining elements
+        The ordered list of deleted elements
     
     Examples
     --------
     >>> gene_names = list(scRNAseq.columns)
-    >>> genes_elim_id = elimination_report[:93,0].astype(int)
-    >>> genes_elim = successive_elimination(gene_names, genes_elim_id)
+    >>> order_elim_id = elimination_report[:,0].astype(int)
+    >>> order_elim = successive_elimination(gene_names, genes_elim_id)
     """
     
     from copy import deepcopy
     elems = deepcopy(list_elems)
     
-    if remaining:
-        successive = elems
-        for i in elems_id:
-            del elems[i]
-    else:
-        successive = []
-        for i in elems_id:
-            successive.append(elems.pop(i))
+    successive = []
+    for i in elems_id:
+        successive.append(elems.pop(i))
     
     return successive
 
@@ -1001,10 +994,10 @@ elimination_report = np.loadtxt("../data/processed/elimination_report-balanced-a
 # Keep the minimum number of genes that lead to good predictions
 gene_names = list(scRNAseq.columns)
 # nb_elim = 86 # optimal number of genes to discard
-nb_elim = 93 # eliminate more genes, with still good performance
-genes_elim_id = elimination_report[:nb_elim,0].astype(int)
-genes_elim = successive_elimination(gene_names, genes_elim_id)
-
+nb_elim = 94 # eliminate more genes, with still good performance
+order_elim_id = elimination_report[:,0].astype(int)
+order_elim = successive_elimination(gene_names, order_elim_id)
+genes_elim = order_elim[:nb_elim]
 
 scRNAseq_drop = copy.deepcopy(scRNAseq)
 seqFISH_drop = copy.deepcopy(seqFISH)
