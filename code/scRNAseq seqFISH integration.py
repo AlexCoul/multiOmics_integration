@@ -1009,6 +1009,7 @@ scaler_sc = StandardScaler()  # for scRNAseq
 scaler_seq = StandardScaler() # for seqFISH
 Xtest = scaler_sc.fit_transform(scRNAseq_drop)
 Xpred = scaler_seq.fit_transform(seqFISH_drop)  
+print(f"There are {Xtest.shape[1]} remaining genes")
 
 
 # %% [markdown]
@@ -1254,20 +1255,17 @@ error_cells = np.isnan(genes_aggreg[:,0])
 nb_errors = error_cells.sum()
 print(f"There has been {nb_errors}/{nb_cells} cells set to NaN")
 
-# %%
-neigh_valid = genes_aggreg[~error_cells,:]
-
 # %% [markdown]
 # #### Visualization
 
 # %%
 marker = 'o'
 size_points = 10
-colormap = 'tab10'
+colormap = 'Set1'
 
 # %%
-reducer = umap.UMAP()
-embedding = reducer.fit_transform(neigh_valid)
+reducer = umap.UMAP(random_state=0)
+embedding = reducer.fit_transform(genes_aggreg)
 embedding.shape
 
 # %%
@@ -1275,7 +1273,7 @@ plt.figure(figsize=[10,10])
 plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
 title = "Aggregated neighbors' genes data"
 plt.title(title, fontsize=18);
-plt.savefig('../data/processed/'+title, bbox_inches='tight')
+# plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # It looks like we can define some clusters :)
@@ -1290,9 +1288,11 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # #### HDBSCAN
 
 # %%
-clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20)
-clusterer.fit(neigh_valid)
-print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+clusterer = hdbscan.HDBSCAN(metric='euclidean')
+clusterer.fit(genes_aggreg)
+labels_hdbs = clusterer.labels_
+nb_clust_hdbs = labels_hdbs.max() + 1
+print(f"HDBSCAN has detected {nb_clust_hdbs} clusters")
 
 # %% [markdown]
 # That isn't good at all!  
@@ -1309,34 +1309,80 @@ print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
 # %%
 clust = OPTICS()
 # Run the fit
-clust.fit(neigh_valid)
+clust.fit(genes_aggreg)
+labels_opt = clust.labels_
+nb_clust_opt = labels_opt.max() + 1
+print(f"OPTICS has detected {nb_clust_opt} clusters")
 
 # %%
-clust.labels_.max()
-
-# %%
-class_id, class_count = np.unique(clust.labels_, return_counts=True)
+class_id, class_count = np.unique(labels_opt, return_counts=True)
 plt.bar(class_id, class_count, width=0.8);
 plt.title('Clusters histogram');
+
 
 # %% [markdown]
 # Most of points are classified as `-1`, which mean noise, which is bad!
 
 # %%
-# Define cluster colors to highlight noise
-from bokeh.palettes import Category10
+def make_cluster_cmap(labels, grey_pos='start'):
+    """
+    Creates an appropriate colormap for a vector of cluster labels.
+    
+    Parameters
+    ----------
+    labels : array_like
+        The labels of multiple clustered points
+    grey_pos: str
+        Where to put the grey color for the noise
+    
+    Returns
+    -------
+    cmap : matplotlib colormap object
+        A correct colormap
+    
+    Examples
+    --------
+    >>> my_cmap = make_cluster_cmap(labels=np.array([-1,3,5,2,4,1,3,-1,4,2,5]))
+    """
+    
+    from matplotlib.colors import ListedColormap
+    
+    if labels.max() < 9:
+        cmap = list(plt.get_cmap('tab10').colors)
+        if grey_pos == 'end':
+            cmap.append(cmap.pop(-3))
+        elif grey_pos == 'start':
+            cmap = [cmap.pop(-3)] + cmap
+        elif grey_pos == 'del':
+            del cmap[-3]
+    else:
+        cmap = list(plt.get_cmap('tab20').colors)
+        if grey_pos == 'end':
+            cmap.append(cmap.pop(-6))
+            cmap.append(cmap.pop(-6))
+        elif grey_pos == 'start':
+            cmap = [cmap.pop(-5)] + cmap
+            cmap = [cmap.pop(-5)] + cmap
+        elif grey_pos == 'del':
+            del cmap[-5]
+            del cmap[-5]
+    cmap = ListedColormap(cmap)
+    
+    return cmap
+    
 
-nb_labels = clust.labels_.max()
-palette = Category10[nb_labels]
-palette_grey =  list(Category10[nb_labels])
-palette_grey.append('#C0C0C0')
-clust_colors = [palette_grey[x] for x in clust.labels_]
 
+# %%
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c=clust_colors, marker=marker, s=size_points)
+plt.scatter(embedding[:, 0],
+            embedding[:, 1],
+            c=labels_opt,
+            cmap=make_cluster_cmap(labels_opt),
+            marker=marker,
+            s=size_points)
 title = "Aggregated neighbors' genes data - OPTICS"
 plt.title(title, fontsize=18);
-plt.savefig('../data/processed/'+title, bbox_inches='tight')
+# plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # That is not much better!  
@@ -1353,8 +1399,8 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 embedding = umap.UMAP(n_neighbors=30,
                       min_dist=0.0,
                       n_components=2,
-                      random_state=42,
-                      ).fit_transform(neigh_valid)
+                      random_state=0,
+                      ).fit_transform(genes_aggreg)
 
 plt.figure(figsize=[10,10])
 plt.scatter(embedding[:, 0], embedding[:, 1], c='royalblue', marker=marker, s=size_points)
@@ -1363,34 +1409,29 @@ plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
-clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=30, min_samples=1)
 clusterer.fit(embedding)
-print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+labels_hdbs = clusterer.labels_
+nb_clust_hdbs = labels_hdbs.max() + 1
+print(f"HDBSCAN has detected {nb_clust_hdbs} clusters")
 
 # %% [markdown]
 # we choose `min_samples=1` to avoid having points considered as noise
 
 # %%
-labels = clusterer.labels_
-clustered = (labels >= 0)
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[~clustered, 0],
-            embedding[~clustered, 1],
-            c=(0.5, 0.5, 0.5),
+plt.scatter(embedding[:, 0],
+            embedding[:, 1],
+            c=labels_hdbs,
             s=5,
-            alpha=0.9)
-plt.scatter(embedding[clustered, 0],
-            embedding[clustered, 1],
-            c=labels[clustered],
-            s=5,
-            cmap='Spectral');
+            cmap=make_cluster_cmap(labels_hdbs));
 
 title = "HDBSCAN clustering on aggregated neighbors' genes data"
 plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
-class_id, class_count = np.unique(labels[clustered], return_counts=True)
+class_id, class_count = np.unique(labels_hdbs, return_counts=True)
 plt.bar(class_id, class_count, width=0.8);
 plt.title('Clusters histogram');
 
@@ -1406,7 +1447,9 @@ clust = OPTICS(min_cluster_size=50)
 # Run the fit
 clust.fit(embedding)
 
-clust.labels_.max()
+labels_opt = clust.labels_
+nb_clust_opt = labels_opt.max() + 1
+print(f"OPTICS has detected {nb_clust_opt} clusters")
 
 # %%
 class_id, class_count = np.unique(clust.labels_, return_counts=True)
@@ -1414,14 +1457,14 @@ plt.bar(class_id, class_count, width=0.8);
 plt.title('Clusters histogram');
 
 # %%
-nb_labels = clust.labels_.max()
-palette = Category10[nb_labels]
-palette_grey =  list(Category10[nb_labels])
-palette_grey.append('#C0C0C0')
-clust_colors = [palette_grey[x] for x in clust.labels_]
-
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[:, 0], embedding[:, 1], c=clust_colors, marker=marker, s=size_points)
+plt.scatter(embedding[:, 0],
+            embedding[:, 1],
+            c=labels_opt,
+            cmap=make_cluster_cmap(labels_opt),
+            marker=marker,
+            s=size_points)
+
 title = "OPTICS clustering on aggregated neighbors' genes data"
 plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
@@ -1433,21 +1476,65 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # #### Visualisation of spatial seqFISH data and detected areas 
 
 # %%
-fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
-ax[0].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=size_points)
-ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+fig, ax = plt.subplots(1, 3, figsize=(20,7), tight_layout=True)
 
-ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
-ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax[0].scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=14);
+ax[0].legend()
+
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels_hdbs, cmap=make_cluster_cmap(labels_hdbs), marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=14);
+
+ax[2].scatter(embedding[:, 0], embedding[:, 1], c=labels_hdbs, s=5, cmap=make_cluster_cmap(labels_hdbs));
+ax[2].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
 
 title = "spatial seqFISH data and detected areas"
 plt.title(title, fontsize=18);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
-
 # %% [markdown]
 # The detected areas look plausible as points affected to different area types are not randomly dispersed.  
 # Moreover the detected areas span over areas of some phenotypes or form regions smaller than areas of some phenotypes.
+
+# %%
+for min_cluster_size in [20,30,40,50]:
+    clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=min_cluster_size, min_samples=1)
+    clusterer.fit(embedding)
+    labels_hdbs = clusterer.labels_
+    nb_clust_hdbs = labels_hdbs.max() + 1
+    print(f"HDBSCAN has detected {nb_clust_hdbs} clusters")
+
+    # Histogram of classes
+    plt.figure()
+    class_id, class_count = np.unique(labels_hdbs, return_counts=True)
+    plt.bar(class_id, class_count, width=0.8);
+    plt.title('Clusters histogram');
+    title = f"Clusters histogram - min_cluster_size-{min_cluster_size}"
+    plt.savefig('../data/processed/'+title, bbox_inches='tight')
+
+    # Big summary plot
+    fig, ax = plt.subplots(1, 3, figsize=(20,7), tight_layout=True)
+
+    for class_pred, label, color in color_labels:
+        select = class_pred == y_pred
+        ax[0].scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+    ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=14);
+    ax[0].legend()
+
+    ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels_hdbs, cmap=make_cluster_cmap(labels_hdbs), marker=marker, s=size_points)
+    ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=14);
+
+    ax[2].scatter(embedding[:, 0], embedding[:, 1], c=labels_hdbs, s=5, cmap=make_cluster_cmap(labels_hdbs));
+    ax[2].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
+
+    title = f"spatial seqFISH data and detected areas - min_cluster_size-{min_cluster_size}"
+    plt.savefig('../data/processed/'+title, bbox_inches='tight')
+
+
+# %% [markdown]
+# The optimal minimum cluster size seems to be `min_cluster_size=40` as clusters on the UMAP projection seem reasonable, and clusters on the spatial map seem plausible too.
 
 # %% [markdown]
 # ### Multiple neighbors
@@ -1685,39 +1772,47 @@ for i in range(nb_cells):
 embedding = umap.UMAP(n_neighbors=30,
                       min_dist=0.0,
                       n_components=2,
-                      random_state=42,
+                      random_state=0,
                       ).fit_transform(genes_aggreg)
 
 # %%
-clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=40, min_samples=1)
 clusterer.fit(embedding)
-print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+labels_hdbs = clusterer.labels_
+nb_clust_hdbs = labels_hdbs.max() + 1
+print(f"HDBSCAN has detected {nb_clust_hdbs} clusters")
 
 # %%
-labels = clusterer.labels_
-clustered = (labels >= 0)
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[~clustered, 0],
-            embedding[~clustered, 1],
-            c=(0.5, 0.5, 0.5),
+plt.scatter(embedding[:, 0],
+            embedding[:, 1],
+            c=labels_hdbs,
             s=5,
-            alpha=0.9)
-plt.scatter(embedding[clustered, 0],
-            embedding[clustered, 1],
-            c=labels[clustered],
-            s=5,
-            cmap='Spectral');
+            cmap=make_cluster_cmap(labels_hdbs));
+
 title = "HDBSCAN clustering on aggregated neighbors' genes data - 2nd order"
-plt.title(title, fontsize=15);
+plt.title(title, fontsize=14);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
-fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
-ax[0].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=size_points)
-ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+class_id, class_count = np.unique(labels_hdbs, return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
 
-ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
-ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+# %%
+fig, ax = plt.subplots(1, 3, figsize=(20,7), tight_layout=True)
+
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax[0].scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=14);
+ax[0].legend()
+
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels_hdbs, cmap=make_cluster_cmap(labels_hdbs), marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=14);
+
+ax[2].scatter(embedding[:, 0], embedding[:, 1], c=labels_hdbs, s=5, cmap=make_cluster_cmap(labels_hdbs));
+ax[2].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
 
 title = "spatial seqFISH data and detected areas - 2nd order"
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
@@ -1745,39 +1840,47 @@ for i in range(nb_cells):
 embedding = umap.UMAP(n_neighbors=30,
                       min_dist=0.0,
                       n_components=2,
-                      random_state=42,
+                      random_state=0,
                       ).fit_transform(genes_aggreg)
 
 # %%
-clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=40, min_samples=1)
 clusterer.fit(embedding)
-print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
+labels_hdbs = clusterer.labels_
+nb_clust_hdbs = labels_hdbs.max() + 1
+print(f"HDBSCAN has detected {nb_clust_hdbs} clusters")
 
 # %%
-labels = clusterer.labels_
-clustered = (labels >= 0)
 plt.figure(figsize=[10,10])
-plt.scatter(embedding[~clustered, 0],
-            embedding[~clustered, 1],
-            c=(0.5, 0.5, 0.5),
+plt.scatter(embedding[:, 0],
+            embedding[:, 1],
+            c=labels_hdbs,
             s=5,
-            alpha=0.9)
-plt.scatter(embedding[clustered, 0],
-            embedding[clustered, 1],
-            c=labels[clustered],
-            s=5,
-            cmap='Spectral');
-title = "HDBSCAN clustering on aggregated neighbors' genes data - 3rnd order"
-plt.title(title, fontsize=18);
+            cmap=make_cluster_cmap(labels_hdbs));
+
+title = "HDBSCAN clustering on aggregated neighbors' genes data - 3rd order"
+plt.title(title, fontsize=14);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %%
-fig, ax = plt.subplots(1, 2, figsize=(15,7), tight_layout=True)
-ax[0].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=y_pred, cmap=colormap, marker=marker, s=size_points)
-ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=18);
+class_id, class_count = np.unique(labels_hdbs, return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
 
-ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
-ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=18);
+# %%
+fig, ax = plt.subplots(1, 3, figsize=(20,7), tight_layout=True)
+
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax[0].scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=14);
+ax[0].legend()
+
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels_hdbs, cmap=make_cluster_cmap(labels_hdbs), marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=14);
+
+ax[2].scatter(embedding[:, 0], embedding[:, 1], c=labels_hdbs, s=5, cmap=make_cluster_cmap(labels_hdbs));
+ax[2].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
 
 title = "spatial seqFISH data and detected areas - 3rd order"
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
@@ -1788,7 +1891,7 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # %%
 orders = [4, 5, 6]
 
-fig, ax = plt.subplots(nrows=len(orders), ncols=2, figsize=plt.figaspect(1.3)*4)
+fig, ax = plt.subplots(nrows=len(orders), ncols=3, figsize=(20,7*len(orders)))
 for row, order in enumerate(orders):
     genes_aggreg = np.zeros((nb_cells, nb_genes*2)) # *2 because mean and variance are stored
     pairs = vor.ridge_points[selection,:]
@@ -1805,32 +1908,39 @@ for row, order in enumerate(orders):
     embedding = umap.UMAP(n_neighbors=30,
                           min_dist=0.0,
                           n_components=2,
-                          random_state=42,
+                          random_state=0,
                           ).fit_transform(genes_aggreg)
 
-    clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=20, min_samples=1)
+    clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=40, min_samples=1)
     clusterer.fit(embedding)
-    print("HDBSCAN has detected {} clusters".format(clusterer.labels_.max()))
-
-    labels = clusterer.labels_
-    clustered = (labels >= 0)
-    ax[row,0].scatter(embedding[~clustered, 0],
-                    embedding[~clustered, 1],
-                    c=(0.5, 0.5, 0.5),
-                    s=5,
-                    alpha=0.9)
-    ax[row,0].scatter(embedding[clustered, 0],
-                    embedding[clustered, 1],
-                    c=labels[clustered],
-                    s=5,
-                    cmap='Spectral');
-    ax[row,0].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=15);
+    labels_hdbs = clusterer.labels_
+    nb_clust_hdbs = labels_hdbs.max() + 1
+    print(f"HDBSCAN has detected {nb_clust_hdbs} clusters")
     
-    ax[row,1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels, cmap=colormap, marker=marker, s=size_points)
-    ax[row,1].set_title('Spatial map of detected areas for seqFISH data', fontsize=15);
+    # Histogram of classes
+    class_id, class_count = np.unique(labels_hdbs, return_counts=True)
+    plt.figure()
+    plt.bar(class_id, class_count, width=0.8);
+    plt.title('Clusters histogram');
 
-title = "spatial seqFISH data and detected areas - higher orders"
-plt.savefig('../data/processed/'+title, bbox_inches='tight')
+    # Big summary figure
+    for class_pred, label, color in color_labels:
+        select = class_pred == y_pred
+        ax[row,0].scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+    ax[row,0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=14);
+    ax[row,0].legend()
+
+    ax[row,1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels_hdbs, cmap=make_cluster_cmap(labels_hdbs), marker=marker, s=size_points)
+    ax[row,1].set_title('Spatial map of detected areas for seqFISH data', fontsize=14);
+
+    ax[row,2].scatter(embedding[:, 0], embedding[:, 1], c=labels_hdbs, s=5, cmap=make_cluster_cmap(labels_hdbs));
+    ax[row,2].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
+
+    title = "spatial seqFISH data and detected areas - higher orders"
+    fig.savefig('../data/processed/'+title, bbox_inches='tight')
+
+# %% [markdown]
+# This is for demonstration only here, because what would be the point in aggregating gene expression data up the the 6th neighbor in such a small sample?
 
 # %% [markdown]
 # ## Conclusion
