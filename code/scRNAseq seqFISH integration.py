@@ -651,7 +651,7 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 t = time.localtime()
 timestamp = time.strftime('%Y-%m-%d_%Hh%M', t)
 
-cv_search= cv_to_df(grid_search.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
+cv_search = cv_to_df(grid_search.cv_results_, scores=['balanced_accuracy','accuracy'], order_by='mean balanced_accuracy')
 cv_search.to_csv(f'../data/processed/grid_search_cv_results-{timestamp}.csv', index=False)
 
 
@@ -659,30 +659,33 @@ cv_search.to_csv(f'../data/processed/grid_search_cv_results-{timestamp}.csv', in
 # #### Line hyperparameters scores
 
 # %%
-def hyperparam_line(results, param_x, score, n_top = 20, best_scores_coeff=500,
-                   figsize = (10,10), best_cmap=sns.light_palette("green", as_cmap=True)):
-    df = pd.DataFrame(results['params'])
-    df['score'] = results[score]
-
+def hyperparam_line(df, param_x, scores, figsize=(10,5), log_scale=True, legend=True):
     plt.figure(figsize=figsize)
-    ax = sns.lineplot(x=param_x, y='score', data=df)
-    ax.set_xscale('log')
-
-    best = df.sort_values(by='score', ascending=False).iloc[:n_top,:]
-    best_scores = best['score'] - best['score'].min()
-    best_scores = best_scores / best_scores.max()
-
-#     ax.scatter(x=best[param_x], y=best['score'], c=best_scores, s=best_scores*best_scores_coeff, marker='+', cmap=best_cmap)
-#     ax.scatter(x=best[param_x].iloc[0], y=best[param_y].iloc[0], s=best_scores.iloc[0]*best_scores_coeff/2, marker='o', color='r', alpha=0.5)
+    for score in scores:
+        ax = sns.lineplot(x=param_x, y=score, data=df, label=score)
+    if log_scale:
+        ax.set_xscale('log')
+    if legend:
+        plt.legend()
 
 
 # %%
+# cv_search = pd.read_csv('../data/processed/grid_search_cv_results-2020-06-09_18h36.csv')
+
 hyperparam_line(grid_search.cv_results_, param_x = 'C', score = 'mean_test_balanced_accuracy', n_top = 20, figsize = (10,5))
 title = 'CV balanced accuracy for Linear SVC hyperparameters search'
 plt.title(title)
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 hyperparam_line(grid_search.cv_results_, param_x = 'C', score = 'mean_test_accuracy', n_top = 20, figsize = (10,5))
 title = 'CV accuracy for Linear SVC hyperparameters search'
+plt.title(title)
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
+
+# %%
+cv_search = pd.read_csv('../data/processed/grid_search_cv_results-2020-06-09_18h36.csv')
+
+hyperparam_line(cv_search, param_x='C', scores = ['mean balanced_accuracy', 'mean accuracy'])
+title = 'CV accuracies for Linear SVC hyperparameters search'
 plt.title(title)
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
@@ -921,10 +924,28 @@ title = 'Accuracy of scRNAseq classification with Linear SVC during variables (g
 plt.title(title);
 plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
-
 # %% [markdown]
 # These plots confirm that Zhu *et al.* probably used the simple accuracy instead of the balanced accuracy.  
 # The kernel SVC require fewer genes (\~19-29) than the linear SVC (\~35-39) to maintain a relatively high score.
+
+# %%
+linear_simple_acc = np.loadtxt("../data/processed/elimination_report_linearSVC-accuracy-2020-06-09_22h30.csv", skiprows=1, delimiter=',')
+linear_balanced_acc = np.loadtxt("../data/processed/elimination_report_linearSVC-balanced_accuracy-2020-06-09_19h47.csv", skiprows=1, delimiter=',')
+kernel_simple_acc = np.loadtxt("../data/processed/elimination_report-accuracy-2020-06-09_15h02.csv", skiprows=1, delimiter=',')
+kernel_balanced_acc = np.loadtxt("../data/processed/elimination_report-balanced-accuracy-2020-06-09_13h11.csv", skiprows=1, delimiter=',')
+
+plt.figure(figsize=(14,8))
+plt.plot(linear_simple_acc[::-1,1], label='Linear SVC, simple accuracy', c='royalblue', linestyle='dashed');
+plt.plot(linear_balanced_acc[::-1,1], label='Linear SVC, balanced accuracy', c='royalblue', linestyle='solid');
+plt.plot(kernel_simple_acc[::-1,1], label='Kernel SVC, simple accuracy', c='tomato', linestyle='dashed');
+plt.plot(kernel_balanced_acc[::-1,1], label='Kernel SVC, balanced accuracy', c='tomato', linestyle='solid');
+plt.xlabel('nb remaining variables + 1')
+plt.ylabel('score')
+plt.legend()
+title = 'Perfomance evaluations of scRNAseq classification with Linear & Kernal SVC during variables (genes) elimination'
+plt.title(title);
+plt.savefig('../data/processed/'+title, bbox_inches='tight')
+
 
 # %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true
 # ## Infer cell types from restricted gene list
