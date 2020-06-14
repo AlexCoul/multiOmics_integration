@@ -1505,7 +1505,8 @@ pos = OrderedDict([
                   ])
 
 order = [0] + [1] * 3 + [2] * 9
-order_color = [palette_grey[x] for x in order]
+order_cmap = cmap = list(plt.get_cmap('tab10').colors)
+order_color = [order_cmap[x] for x in order]
 
 fig, ax = plt.subplots(figsize=[10, 10])
 for a, b in pairs:
@@ -1801,7 +1802,182 @@ for order in orders:
 # |   4   |     3     |    60    |        to show oder 4        |
 # |   4   |     7     |    50    |             idem             |
 
+# %% [markdown]
+# ## Differential Expression analysis
+
+# %% [markdown]
+# Accross the diverse configurations, there are regions that appear consistently.  
+# One of them is curious, on the spatial map it's a spot in the middle of a huge class of cells.  
+# To analyse why these cells stand out in several configuration we will use the config: `order=1, dim_clust=5, min_clust_size=30`, but other config are possible too.
+
 # %%
+# For the visualization
+marker = 'o'
+size_points = 10
+
+order = 1
+nb_genes = seqFISH_drop.shape[0]
+clf_name = 'Kernel SVC'
+
+# compute statistics on aggregated data across neighbors
+genes_aggreg = aggregate_k_neighbors(X=Xpred, pairs=pairs, order=order, var_names=seqFISH_drop.columns)
+
+# Dimension reduction for visualization
+embed_viz = umap.UMAP(n_components=2, random_state=0).fit_transform(genes_aggreg)
+
+dim_clust = 5
+# Dimension reduction for clustering
+embed_clust = umap.UMAP(n_neighbors=30,
+                        min_dist=0.0,
+                        n_components=dim_clust,
+                        random_state=0,
+                       ).fit_transform(genes_aggreg)
+
+min_cluster_size = 30
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=min_cluster_size, min_samples=1)
+clusterer.fit(embed_clust)
+labels_hdbs = clusterer.labels_
+nb_clust_hdbs = labels_hdbs.max() + 1
+print(f"HDBSCAN has detected {nb_clust_hdbs} clusters")
+
+# %%
+# Histogram of classes
+fig = plt.figure()
+class_id, class_count = np.unique(labels_hdbs, return_counts=True)
+plt.bar(class_id, class_count, width=0.8);
+plt.title('Clusters histogram');
+
+# Big summary plot
+fig, ax = plt.subplots(1, 3, figsize=(20,7), tight_layout=False)
+
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax[0].scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker='o', s=20, zorder=10)
+ax[0].set_title('Spatial map of prediction of phenotypes for seqFISH data', fontsize=14);
+ax[0].legend()
+
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels_hdbs, cmap=make_cluster_cmap(labels_hdbs), marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas for seqFISH data', fontsize=14);
+
+ax[2].scatter(embed_viz[:, 0], embed_viz[:, 1], c=labels_hdbs, s=5, cmap=make_cluster_cmap(labels_hdbs));
+ax[2].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
+
+suptitle = f"Spatial seqFISH data and detected areas - nb_genes {nb_genes} - {clf_name} - order {order} - dim_clust {dim_clust} - min_cluster_size {min_cluster_size}";
+fig.suptitle(suptitle, fontsize=14)
+
+# %%
+import scanpy as sc
+
+# %%
+adata = sc.AnnData(genes_aggreg)
+# adata.obs['cell_clusters'] = labels_hdbs
+adata.obs['cell_clusters'] = pd.Series(labels_hdbs, dtype="category")
+
+# %%
+sc.pl.highest_expr_genes(adata, n_top=20)
+
+# %%
+sc.tl.rank_genes_groups(adata, groupby='cell_clusters', method='t-test')
+
+# %%
+sc.pl.rank_genes_groups(adata, n_genes=25, sharey=False)
+
+# %% [markdown]
+# I have issue with Scanpy and Anndata
+
+# %% [markdown]
+# ### Home made DE analysis
+
+# %% [markdown]
+# Are the values normaly distributed?
+
+# %%
+genes_aggreg.hist(bins=50, figsize=(18,15));
+
+# %% [markdown]
+# It would be nice to display the histogram of each cluster per gene, but no time!
+
+# %%
+clust_id = 2
+clust_targ = labels_hdbs == clust_id  # cluster of interest (target)
+clust_comp = labels_hdbs != clust_id  # cluster(s) we compare with
+
+fig, ax = plt.subplots(1, 2, figsize=(14,7), tight_layout=False)
+
+ax[0].scatter(seqFISH_coords.loc[clust_targ,'x'], seqFISH_coords.loc[clust_targ,'y'], c='tomato', marker=marker, s=size_points)
+ax[0].scatter(seqFISH_coords.loc[clust_comp,'x'], seqFISH_coords.loc[clust_comp,'y'], c='lightgrey', marker=marker, s=size_points)
+ax[0].set_title('Spatial map of detected areas for seqFISH data', fontsize=14);
+
+ax[1].scatter(embed_viz[clust_targ, 0], embed_viz[clust_targ, 1], s=5, c='tomato');
+ax[1].scatter(embed_viz[clust_comp, 0], embed_viz[clust_comp, 1], s=5, c='lightgrey');
+ax[1].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
+
+# %%
+clust_id = 3
+clust_targ = labels_hdbs == clust_id  # cluster of interest (target)
+clust_comp = labels_hdbs != clust_id  # cluster(s) we compare with
+
+fig, ax = plt.subplots(1, 2, figsize=(14,7), tight_layout=False)
+
+ax[0].scatter(seqFISH_coords.loc[clust_targ,'x'], seqFISH_coords.loc[clust_targ,'y'], c='tomato', marker=marker, s=size_points)
+ax[0].scatter(seqFISH_coords.loc[clust_comp,'x'], seqFISH_coords.loc[clust_comp,'y'], c='lightgrey', marker=marker, s=size_points)
+ax[0].set_title('Spatial map of detected areas for seqFISH data', fontsize=14);
+
+ax[1].scatter(embed_viz[clust_targ, 0], embed_viz[clust_targ, 1], s=5, c='tomato');
+ax[1].scatter(embed_viz[clust_comp, 0], embed_viz[clust_comp, 1], s=5, c='lightgrey');
+ax[1].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
+
+# %% [markdown]
+# So we will compare cluster 2 vs the rest, and cluster 2 vs cluster 3.
+
+# %%
+from scipy.stats import ttest_ind    # Welch's t-test
+from scipy.stats import mannwhitneyu # Mann-Whitney rank test
+from scipy.stats import ks_2samp     # Kolmogorov-Smirnov statistic
+
+var_names = genes_aggreg.columns
+distrib_pval = {'Welch': [],
+                'Mann-Whitney': [],
+                'Kolmogorov-Smirnov': []}
+select_1 = labels_hdbs == 2
+select_2 = labels_hdbs == 3
+for var_name in var_names:
+    dist1 = genes_aggreg.loc[select_1, var_name]
+    dist2 = genes_aggreg.loc[select_2, var_name]
+    w_stat, w_pval = ttest_ind(dist1, dist2, equal_var=False)
+    mwu_stat, mwu_pval = mannwhitneyu(dist1, dist2)
+    ks_stat, ks_pval = ks_2samp(dist1, dist2)
+    distrib_pval['Welch'].append(w_pval)
+    distrib_pval['Mann-Whitney'].append(mwu_pval)
+    distrib_pval['Kolmogorov-Smirnov'].append(ks_pval)
+DE_pval = pd.DataFrame(distrib_pval, index=var_names)
+
+
+# %%
+def highlight_under(s, thresh=0.05, color='darkorange'):
+    '''
+    highlight values that are under a threshold
+    '''
+    is_under = s <= thresh
+    attr = 'background-color: {}'.format(color)
+    return [attr if v else '' for v in is_under]
+
+
+# %%
+DE_pval.T.style.apply(highlight_under)
+
+# %%
+diff_var = DE_pval.loc[DE_pval['Kolmogorov-Smirnov'] <= 0.05, 'Kolmogorov-Smirnov'].sort_values()
+diff_var
+
+# %%
+diff_var_set = set([var.replace(' mean', '').replace(' std','') for var in diff_var.index])
+for var in diff_var_set:
+    print(var)
+
+# %%
+for var in seqFISH_drop.columns:
+    print(var)
 
 # %% [markdown]
 # ## Conclusion
