@@ -1,4 +1,5 @@
 *.ipynb
+!*Submitted.ipynb
 .ipynb_checkpoints
 data/raw/
 ideas.md

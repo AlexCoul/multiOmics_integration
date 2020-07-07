@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.4.2
+#       jupytext_version: 1.5.0
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -331,7 +331,7 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 # We will simply work on the data given by the workshop organizers as gene expression data are already well processed.
 
 # %% [markdown] toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true toc-hr-collapsed=true toc-nb-collapsed=true
-# ## Map non spatial scRNAseq data to spatial seqFISH data
+# ## Infer scRNAseq-defined cell types from seqFISH data
 
 # %% [markdown]
 # We train and test the models with the scRNAseq data, assuming Tasic's phenotypes definition is the gold standard.
@@ -935,13 +935,15 @@ linear_simple_acc = np.loadtxt("../data/processed/elimination_report_linearSVC-a
 linear_balanced_acc = np.loadtxt("../data/processed/elimination_report_linearSVC-balanced_accuracy-2020-06-09_19h47.csv", skiprows=1, delimiter=',')
 kernel_simple_acc = np.loadtxt("../data/processed/elimination_report-accuracy-2020-06-09_15h02.csv", skiprows=1, delimiter=',')
 kernel_balanced_acc = np.loadtxt("../data/processed/elimination_report-balanced-accuracy-2020-06-09_13h11.csv", skiprows=1, delimiter=',')
+# number of remaining variables
+x = np.arange(linear_simple_acc.shape[0]) + 1
 
-plt.figure(figsize=(14,8))
-plt.plot(linear_simple_acc[::-1,1], label='Linear SVC, simple accuracy', c='royalblue', linestyle='dashed');
-plt.plot(linear_balanced_acc[::-1,1], label='Linear SVC, balanced accuracy', c='royalblue', linestyle='solid');
-plt.plot(kernel_simple_acc[::-1,1], label='Kernel SVC, simple accuracy', c='tomato', linestyle='dashed');
-plt.plot(kernel_balanced_acc[::-1,1], label='Kernel SVC, balanced accuracy', c='tomato', linestyle='solid');
-plt.xlabel('nb remaining variables + 1')
+plt.figure(figsize=(12,7))
+plt.plot(x, linear_simple_acc[::-1,1], label='Linear SVC, simple accuracy', c='dodgerblue', linestyle='dashed');
+plt.plot(x, linear_balanced_acc[::-1,1], label='Linear SVC, balanced accuracy', c='dodgerblue', linestyle='solid');
+plt.plot(x, kernel_simple_acc[::-1,1], label='Kernel SVC, simple accuracy', c='salmon', linestyle='dashed');
+plt.plot(x, kernel_balanced_acc[::-1,1], label='Kernel SVC, balanced accuracy', c='salmon', linestyle='solid');
+plt.xlabel('# remaining variables')
 plt.ylabel('score')
 plt.legend()
 title = 'Perfomance evaluations of scRNAseq classification with Linear & Kernal SVC during variables (genes) elimination'
@@ -1200,6 +1202,7 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 #  mainly artifacts at the borders of the whole dataset
 EDGE_DIST_THRESH = 300 
 selection = distances < EDGE_DIST_THRESH
+pairs = vor.ridge_points[selection,:]
 
 fig, ax = plt.subplots(figsize=[15, 15])
 for points in voro_cells[selection,:]:
@@ -1716,7 +1719,7 @@ plt.savefig('../data/processed/'+title, bbox_inches='tight')
 
 # %% [markdown]
 # The detected areas look plausible as points affected to different area types are not randomly dispersed.  
-# Moreover the detected areas span over areas of some phenotypes or form regions smaller than areas of some phenotypes.
+# Moreover will see with future configurations that the detected areas span over areas of some phenotypes or form regions smaller than areas of some phenotypes.
 
 # %% [markdown]
 # #### Screening of order and clustering
@@ -1798,6 +1801,70 @@ for order in orders:
 # |   3   |     66    |    40    |                              |
 # |   4   |     3     |    60    |        to show oder 4        |
 # |   4   |     7     |    50    |             idem             |
+
+# %% [markdown]
+# #### Summary image for the white paper
+
+# %%
+pairs = vor.ridge_points[selection,:]
+marker = 'o'
+size_points = 10
+
+clf_name = 'Kernel SVC'
+nb_genes = scRNAseq_drop.shape[1]
+
+order = 2
+dim_clust = 2
+min_cluster_size = 40
+
+# compute statistics on aggregated data across neighbors
+genes_aggreg = aggregate_k_neighbors(X=Xpred, pairs=pairs, order=order, var_names=seqFISH_drop.columns)
+
+# Dimension reduction for visualization
+embed_viz = umap.UMAP(n_components=2, random_state=0).fit_transform(genes_aggreg)
+
+
+# Dimension reduction for clustering
+embed_clust = umap.UMAP(n_neighbors=30,
+                        min_dist=0.0,
+                        n_components=dim_clust,
+                        random_state=0,
+                       ).fit_transform(genes_aggreg)
+
+
+clusterer = hdbscan.HDBSCAN(metric='euclidean', min_cluster_size=min_cluster_size, min_samples=1)
+clusterer.fit(embed_clust)
+labels_hdbs = clusterer.labels_
+nb_clust_hdbs = labels_hdbs.max() + 1
+print(f"HDBSCAN has detected {nb_clust_hdbs} clusters")
+
+# Big summary plot
+fig, ax = plt.subplots(1, 3, figsize=(25,9), tight_layout=True)
+
+# Network
+for points in voro_cells[selection,:]:
+    ax[0].plot(points[[0,2]],points[[1,3]],zorder=0, c='k', alpha=0.7, linewidth=0.5)
+for class_pred, label, color in color_labels:
+    select = class_pred == y_pred
+    ax[0].scatter(seqFISH_coords.loc[select,'x'], seqFISH_coords.loc[select,'y'], c=color, label=label, marker=marker, s=size_points, zorder=10)
+ax[0].set_title('Spatial network of predicted phenotypes', fontsize=14);
+ax[0].axis('off')
+ax[0].legend()
+
+# Detected areas
+ax[1].scatter(seqFISH_coords.loc[:,'x'], seqFISH_coords.loc[:,'y'], c=labels_hdbs, cmap=make_cluster_cmap(labels_hdbs), marker=marker, s=size_points)
+ax[1].set_title('Spatial map of detected areas', fontsize=14);
+ax[1].axis('off')
+
+# HDBSCAN clustering on UMAP projection
+ax[2].scatter(embed_viz[:, 0], embed_viz[:, 1], c=labels_hdbs, marker=marker, s=size_points, cmap=make_cluster_cmap(labels_hdbs));
+ax[2].set_title("HDBSCAN clustering on aggregated neighbors' genes data", fontsize=14);
+ax[2].axis('off')
+
+suptitle = f"Areas detection from seqFISH spatial network - nb_genes {nb_genes} - {clf_name} - order {order} - dim_clust {dim_clust} - min_cluster_size {min_cluster_size}"
+# fig.suptitle(suptitle, fontsize=14)
+fig.savefig("../data/processed/"+suptitle, bbox_inches='tight')
+plt.show()
 
 # %% [markdown]
 # ## Differential Expression analysis
@@ -2367,9 +2434,11 @@ for var in seqFISH.columns:
 # ## Conclusion
 
 # %% [markdown]
-# We have seen that it is possible to assign to seqFISH data points their corresponding phenotypes defined from the scRNAseq data, with only 29 genes.  
+# We have seen that it is possible to assign to seqFISH data points their corresponding phenotypes defined from the scRNAseq data, with only 19 genes.  
 #
 # Moreover for seqFISH data aggregating gene expression for each node and it's neighbors we have found different groups, which migh correspond to areas of cell of different proportions in phenotypes.  
 # It would be interesting to check that in a further analysis.  
 #
 # An interesting lead could be, for each cell, retrieve the mean values of its corresponding phenotype (the 'signature' of the phenotype), and then run again an aggregated neighbors' gene expression analysis. That could emphasise the genes that are under or over expressed due to the localisation of the cells and eliminate the strong contributions of genes that are specific of cell type.
+
+# %%
